@@ -1960,9 +1960,11 @@ async function submitForm(form) {
       await route();
     } else if (type === "onboard" && form.dataset.standalone) {
       const res = await post("/api/vendors", { name: body.name.trim(), country: (body.country || "").trim() || null });
+      const ticketId = document.querySelector("#app-modal form[data-form=resolve-ticket]")?.dataset.id;
       closeModal();
-      notice(res.settled?.length ? "Supplier added. The request is complete." : "Supplier added.");
+      notice(res.settled?.length ? "Supplier added. The request is complete." : "Supplier added. Now add its order.");
       await route();
+      if (!res.settled?.length && ticketId) document.querySelector(`[data-action=resolve-standalone][data-id="${ticketId}"]`)?.click();
     } else if (type === "create-po" && form.dataset.standalone) {
       const res = await post("/api/pos", { ...body, supplier_id: form.dataset.supplier });
       closeModal();
@@ -2361,8 +2363,8 @@ async function handleAction(action, button) {
     const approved = state.vendors.filter((v) => v.status === "approved").sort((a, b) => a.name.localeCompare(b.name));
     openModal({
       title: "New request to procurement",
-      subtitle: "Not tied to an invoice. It closes itself once the supplier or order exists.",
-      body: `<form data-form="standalone-request" class="form-grid modal-form"><label>What do you need?<select name="kind" data-request-kind><option value="onboard_supplier">Onboard a new supplier</option><option value="raise_po">Raise a purchase order for a supplier</option></select></label><label data-when="onboard_supplier">Supplier name<input name="subject" placeholder="Exactly as it appears on their invoices" required></label><label data-when="raise_po" hidden>Supplier<select name="supplier_id"><option value="">Choose a supplier…</option>${approved.map((v) => `<option value="${esc(v.supplier_id)}">${esc(v.name)}</option>`).join("")}</select></label><div class="form-grid two" style="margin:0"><label data-when="raise_po" hidden>Amount the order should authorize<input name="amount" inputmode="decimal" placeholder="12000.00"></label><label data-when="raise_po" hidden>Currency<input name="currency" placeholder="USD" maxlength="3" style="text-transform:uppercase"></label></div><label>Note for procurement<textarea name="note" placeholder="Why it is needed, amount and currency for an order, contract or contact details"></textarea></label><button class="primary small">Send request</button></form>`,
+      subtitle: "Not tied to an invoice. It closes itself once the supplier and its order exist.",
+      body: `<form data-form="standalone-request" class="form-grid modal-form"><label>What do you need?<select name="kind" data-request-kind><option value="onboard_supplier">Onboard a new supplier</option><option value="raise_po">Raise a purchase order for a supplier</option></select></label><label data-when="onboard_supplier">Supplier name<input name="subject" placeholder="Exactly as it appears on their invoices" required></label><label data-when="raise_po" hidden>Supplier<select name="supplier_id"><option value="">Choose a supplier…</option>${approved.map((v) => `<option value="${esc(v.supplier_id)}">${esc(v.name)}</option>`).join("")}</select></label><div class="form-grid two" style="margin:0"><label>Order the supplier needs — amount<input name="amount" inputmode="decimal" placeholder="12000.00" required></label><label>Currency<input name="currency" placeholder="USD" maxlength="3" style="text-transform:uppercase" required></label></div><small class="muted">A supplier without a purchase order cannot be invoiced, so every request names the order it needs. The request closes once both exist.</small><label>Note for procurement<textarea name="note" placeholder="Why it is needed, amount and currency for an order, contract or contact details"></textarea></label><button class="primary small">Send request</button></form>`,
     });
     return;
   }
@@ -2371,14 +2373,23 @@ async function handleAction(action, button) {
     if (!t) return;
     const approved = state.vendors.filter((v) => v.status === "approved").sort((a, b) => a.name.localeCompare(b.name));
     const vendor = state.vendors.find((v) => v.supplier_id === t.supplier_id);
+    const subjectLower = (t.subject || "").trim().toLowerCase();
+    const existing = t.kind === "onboard_supplier"
+      ? state.vendors.find((v) => v.status === "approved" && (v.name.toLowerCase() === subjectLower || (v.aliases || []).includes(subjectLower)))
+      : null;
+    const orderFor = (sid, name) => `<form data-form="create-po" data-standalone="1" data-supplier="${esc(sid)}" class="form-grid modal-form"><p class="muted">Order for <b>${esc(name)}</b>.</p>`;
     const work =
       t.kind === "onboard_supplier"
-        ? `<form data-form="onboard" data-standalone="1" class="form-grid modal-form"><label>Supplier legal name<input name="name" value="${esc(t.subject || "")}" required></label><label>Country (optional)<input name="country"></label><button class="primary small">Add approved supplier</button></form><details class="compact-details"><summary>Existing supplier under another name?</summary><form data-form="add-alias" data-standalone="1" data-subject="${esc(t.subject || "")}" class="form-grid"><label>Approved supplier<select name="supplier_id" required><option value="">Choose a supplier…</option>${approved.map((v) => `<option value="${esc(v.supplier_id)}">${esc(v.name)}</option>`).join("")}</select></label><button class="small">Register “${esc(t.subject || "")}” as a name of this supplier</button></form></details>`
-        : `<form data-form="create-po" data-standalone="1" data-supplier="${esc(t.supplier_id || "")}" class="form-grid modal-form"><p class="muted">Order for <b>${esc(vendor?.name || t.subject || "")}</b>.</p><label>Purchase order number<input name="po_id" placeholder="PO-3010" required></label><label>Currency<input name="currency" value="${esc(t.currency || "")}" placeholder="USD" required></label><label>Authorized amount<input name="amount" inputmode="decimal" value="${esc(t.amount_minor != null ? (t.amount_minor / 10 ** (EXP[t.currency] ?? 2)).toFixed(EXP[t.currency] ?? 2) : "")}" placeholder="10000.00" required></label><small class="muted">Requested: ${esc(t.amount_minor != null ? money(t.amount_minor, t.currency) : "no amount given")}. Anything lower keeps the request open.</small><button class="primary small">Add purchase order</button></form>`;
+        ? existing
+          ? `<p class="saved-mark">✓ Step 1 done: ${esc(existing.name)} is an approved supplier.</p><p class="muted">Step 2: add the order the reviewer asked for.</p>${orderFor(existing.supplier_id, existing.name)}`
+          : `<p class="muted">Step 1: approve the supplier. Step 2 (the order) follows in this same request.</p><form data-form="onboard" data-standalone="1" class="form-grid modal-form"><label>Supplier legal name<input name="name" value="${esc(t.subject || "")}" required></label><label>Country (optional)<input name="country"></label><button class="primary small">Add approved supplier</button></form><details class="compact-details"><summary>Existing supplier under another name?</summary><form data-form="add-alias" data-standalone="1" data-subject="${esc(t.subject || "")}" class="form-grid"><label>Approved supplier<select name="supplier_id" required><option value="">Choose a supplier…</option>${approved.map((v) => `<option value="${esc(v.supplier_id)}">${esc(v.name)}</option>`).join("")}</select></label><button class="small">Register “${esc(t.subject || "")}” as a name of this supplier</button></form></details>`
+        : orderFor(t.supplier_id || "", vendor?.name || t.subject || "").replace(/$/, "");
+    const orderFields = `<label>Purchase order number<input name="po_id" placeholder="PO-3010" required></label><label>Currency<input name="currency" value="${esc(t.currency || "")}" placeholder="USD" required></label><label>Authorized amount<input name="amount" inputmode="decimal" value="${esc(t.amount_minor != null ? (t.amount_minor / 10 ** (EXP[t.currency] ?? 2)).toFixed(EXP[t.currency] ?? 2) : "")}" placeholder="10000.00" required></label><small class="muted">Requested: ${esc(t.amount_minor != null ? money(t.amount_minor, t.currency) : "no amount given")}. Anything lower keeps the request open.</small><button class="primary small">Add purchase order</button></form>`;
+    const workHTML = work.endsWith("</b>.</p>") ? work + orderFields : work;
     openModal({
       title: t.kind_label || TICKET_KINDS[t.kind],
       subtitle: `${t.subject || ""}${t.note ? ` · “${t.note}”` : ""} · asked by ${t.requested_by}`,
-      body: `${work}<div class="modal-actions">${requestFooterHTML([t])}</div>`,
+      body: `${workHTML}<div class="modal-actions">${requestFooterHTML([t])}</div>`,
     });
     return;
   }

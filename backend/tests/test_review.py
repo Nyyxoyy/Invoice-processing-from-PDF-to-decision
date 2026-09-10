@@ -861,20 +861,27 @@ def test_standalone_requests_close_themselves_like_invoice_ones(env):
         open_standalone_request(conn, "onboard_supplier", "x", "reviewer@demo", subject="Northwind Supplies LLC")  # already approved
     with pytest.raises(ReviewError):
         open_standalone_request(conn, "unblock_supplier", "x", "reviewer@demo")
-    t = open_standalone_request(conn, "onboard_supplier", "new vendor", "reviewer@demo", subject="Orbit Tools GmbH")
-    again = open_standalone_request(conn, "onboard_supplier", "again", "reviewer@demo", subject="orbit tools gmbh")
+    with pytest.raises(ReviewError):
+        open_standalone_request(conn, "onboard_supplier", "x", "reviewer@demo", subject="Orbit Tools GmbH")        # order amount required
+    t = open_standalone_request(conn, "onboard_supplier", "new vendor", "reviewer@demo", subject="Orbit Tools GmbH",
+                                amount="5000", currency="USD")
+    again = open_standalone_request(conn, "onboard_supplier", "again", "reviewer@demo", subject="orbit tools gmbh",
+                                    amount="1", currency="USD")
     assert again["existing"] and again["ticket_id"] == t["ticket_id"]
     listed = list_tickets(conn, "open")[0]
     assert listed["standalone"] and listed["supplier_name"] == "Orbit Tools GmbH" and listed["fulfilled"] is False
     with pytest.raises(ReviewError):
         resolve_ticket(conn, t["ticket_id"], "resolved", "done", "procurement@demo")    # record does not show it
-    onboard_vendor(conn, "Orbit Tools GmbH", None, "procurement@demo")
+    v = onboard_vendor(conn, "Orbit Tools GmbH", None, "procurement@demo")
+    assert settle_requests(conn, "procurement@demo") == []                              # supplier alone is not enough
+    assert "Add an order of at least USD 5,000.00" in list_tickets(conn, "open")[0]["fact"]
+    create_po(conn, "PO-OT-1", v["supplier_id"], "USD", "5000.00", "procurement@demo")
     settled = settle_requests(conn, "procurement@demo")
-    assert [s["ticket_id"] for s in settled] == [t["ticket_id"]] and "Done by procurement" in settled[0]["resolution_note"]
-    # an alias satisfies it too
-    t2 = open_standalone_request(conn, "onboard_supplier", "sub", "reviewer@demo", subject="Orbit Tools Nordic")
-    update_vendor(conn, conn.execute("SELECT supplier_id FROM vendors WHERE name='Orbit Tools GmbH'").fetchone()["supplier_id"],
-                  add_aliases=["Orbit Tools Nordic"])
+    assert [s["ticket_id"] for s in settled] == [t["ticket_id"]] and "PO-OT-1" in settled[0]["resolution_note"]
+    # an alias of a supplier that already has a covering order satisfies it at once
+    t2 = open_standalone_request(conn, "onboard_supplier", "sub", "reviewer@demo", subject="Orbit Tools Nordic",
+                                 amount="4000", currency="USD")
+    update_vendor(conn, v["supplier_id"], add_aliases=["Orbit Tools Nordic"])
     assert [s["ticket_id"] for s in settle_requests(conn, "procurement@demo")] == [t2["ticket_id"]]
     # raise_po for an existing supplier: only a NEW order answers it
     with pytest.raises(ReviewError):

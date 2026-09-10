@@ -805,20 +805,22 @@ def open_standalone_request(conn, kind: str, note: str, requested_by: str,
         supplier_id = None
         dup = conn.execute("SELECT * FROM tickets WHERE run_id IS NULL AND kind='onboard_supplier' AND status='open' "
                            "AND lower(subject)=lower(?)", (subject,)).fetchone()
-    amount_minor = None
     if kind == "raise_po":
         v = conn.execute("SELECT * FROM vendors WHERE supplier_id=?", (supplier_id or "",)).fetchone()
         if v is None:
             raise ReviewError(422, "Choose the supplier the order is for.")
         subject = v["name"]
-        from .currencies import is_supported
-        currency = (currency or "").strip().upper()
-        if not is_supported(currency):
-            raise ReviewError(422, "Give the order currency as a code, for example USD or EUR.")
-        dec = extract_amount(amount or "")
-        amount_minor = quantize_minor(dec, currency) if dec is not None else None
-        if not amount_minor or amount_minor <= 0:
-            raise ReviewError(422, "Give the amount the order should authorize, for example 12000.00.")
+        dup = conn.execute("SELECT * FROM tickets WHERE run_id IS NULL AND kind='raise_po' AND status='open' "
+                           "AND supplier_id=?", (supplier_id,)).fetchone()
+    # a supplier without an order is useless to the reviewer: every request names the order it needs
+    from .currencies import is_supported
+    currency = (currency or "").strip().upper()
+    if not is_supported(currency):
+        raise ReviewError(422, "Give the order currency as a code, for example USD or EUR.")
+    dec = extract_amount(amount or "")
+    amount_minor = quantize_minor(dec, currency) if dec is not None else None
+    if not amount_minor or amount_minor <= 0:
+        raise ReviewError(422, "Give the amount the order should authorize, for example 12000.00.")
         dup = conn.execute("SELECT * FROM tickets WHERE run_id IS NULL AND kind='raise_po' AND status='open' "
                            "AND supplier_id=?", (supplier_id,)).fetchone()
     if dup:
@@ -831,8 +833,7 @@ def open_standalone_request(conn, kind: str, note: str, requested_by: str,
         conn.execute(
             "INSERT INTO tickets (ticket_id, run_id, kind, note, requested_by, supplier_id, known_pos, subject, amount_minor, currency) "
             "VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (ticket_id, kind, (note or "").strip(), requested_by, supplier_id, known, subject,
-             amount_minor, currency if kind == "raise_po" else None))
+            (ticket_id, kind, (note or "").strip(), requested_by, supplier_id, known, subject, amount_minor, currency))
         conn.execute("COMMIT")
     except BaseException:
         conn.execute("ROLLBACK")
@@ -844,9 +845,15 @@ def _standalone_fulfilled(conn, row: dict) -> tuple[bool, str | None]:
     from .pipeline import resolve_vendor
     if row["kind"] == "onboard_supplier":
         v = resolve_vendor(conn, row.get("subject") or "")
-        if v is not None and v["status"] == "approved":
-            return True, f"{v['name']} is an approved supplier."
-        return False, None
+        if v is None or v["status"] != "approved":
+            return False, None
+        want, cur = row.get("amount_minor") or 0, row.get("currency")
+        orders = conn.execute("SELECT po_id, amount_minor, currency FROM pos WHERE supplier_id=? AND status='open'",
+                              (v["supplier_id"],)).fetchall()
+        good = [r for r in orders if (not cur or r["currency"] == cur) and r["amount_minor"] >= want]
+        if good:
+            return True, f"{v['name']} is an approved supplier and order {good[0]['po_id']} ({_fmt_money(good[0]['amount_minor'], good[0]['currency'])}) is available."
+        return False, f"{v['name']} is approved. Add an order of at least {_fmt_money(want, cur)} to finish the request."
     if row["kind"] == "raise_po":
         known = set(json.loads(row.get("known_pos") or "[]"))
         want, cur = row.get("amount_minor") or 0, row.get("currency")
