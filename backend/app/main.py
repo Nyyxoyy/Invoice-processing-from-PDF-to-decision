@@ -537,13 +537,16 @@ class StandaloneRequestBody(BaseModel):
     kind: str                      # onboard_supplier | raise_po
     subject: str | None = None     # supplier name to onboard
     supplier_id: str | None = None # supplier the order is for
+    amount: str | None = None      # requested order amount (raise_po)
+    currency: str | None = None
     note: str = ""
 
 
 @app.post("/api/requests")
 def create_standalone_request(body: StandaloneRequestBody, user: dict = Depends(require_reviewer)):
     return _review_guard(open_standalone_request)(app.state.conn, body.kind, body.note, user["actor"],
-                                                  subject=body.subject, supplier_id=body.supplier_id)
+                                                  subject=body.subject, supplier_id=body.supplier_id,
+                                                  amount=body.amount, currency=body.currency)
 
 
 class TicketResolveBody(BaseModel):

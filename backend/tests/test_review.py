@@ -877,8 +877,15 @@ def test_standalone_requests_close_themselves_like_invoice_ones(env):
                   add_aliases=["Orbit Tools Nordic"])
     assert [s["ticket_id"] for s in settle_requests(conn, "procurement@demo")] == [t2["ticket_id"]]
     # raise_po for an existing supplier: only a NEW order answers it
-    t3 = open_standalone_request(conn, "raise_po", "Q4 budget", "reviewer@demo", supplier_id="sup-northwind")
+    with pytest.raises(ReviewError):
+        open_standalone_request(conn, "raise_po", "Q4", "reviewer@demo", supplier_id="sup-northwind")            # amount required
+    t3 = open_standalone_request(conn, "raise_po", "Q4 budget", "reviewer@demo", supplier_id="sup-northwind",
+                                 amount="12,000.00", currency="usd")
+    assert t3["amount_minor"] == 1_200_000 and t3["currency"] == "USD"
     assert settle_requests(conn, "procurement@demo") == []
-    create_po(conn, "PO-1077", "sup-northwind", "USD", "3000.00", "procurement@demo")
+    create_po(conn, "PO-1077", "sup-northwind", "USD", "3000.00", "procurement@demo")                     # too small
+    assert settle_requests(conn, "procurement@demo") == []
+    assert "does not cover" in list_tickets(conn, "open")[0]["fact"]
+    create_po(conn, "PO-1078", "sup-northwind", "USD", "12000.00", "procurement@demo")
     settled = settle_requests(conn, "procurement@demo")
-    assert [s["ticket_id"] for s in settled] == [t3["ticket_id"]] and "PO-1077" in settled[0]["resolution_note"]
+    assert [s["ticket_id"] for s in settled] == [t3["ticket_id"]] and "PO-1078" in settled[0]["resolution_note"]

@@ -787,7 +787,8 @@ STANDALONE_KINDS = {"onboard_supplier": "Onboard a new supplier", "raise_po": "R
 
 
 def open_standalone_request(conn, kind: str, note: str, requested_by: str,
-                            subject: str | None = None, supplier_id: str | None = None) -> dict:
+                            subject: str | None = None, supplier_id: str | None = None,
+                            amount: str | None = None, currency: str | None = None) -> dict:
     """A request raised from the Requests page, not from an invoice: onboard a
     named supplier, or raise an order for an existing supplier. Fulfilment is
     derived the same way (the record decides), so it closes itself too."""
@@ -804,11 +805,20 @@ def open_standalone_request(conn, kind: str, note: str, requested_by: str,
         supplier_id = None
         dup = conn.execute("SELECT * FROM tickets WHERE run_id IS NULL AND kind='onboard_supplier' AND status='open' "
                            "AND lower(subject)=lower(?)", (subject,)).fetchone()
-    else:
+    amount_minor = None
+    if kind == "raise_po":
         v = conn.execute("SELECT * FROM vendors WHERE supplier_id=?", (supplier_id or "",)).fetchone()
         if v is None:
             raise ReviewError(422, "Choose the supplier the order is for.")
         subject = v["name"]
+        from .currencies import is_supported
+        currency = (currency or "").strip().upper()
+        if not is_supported(currency):
+            raise ReviewError(422, "Give the order currency as a code, for example USD or EUR.")
+        dec = extract_amount(amount or "")
+        amount_minor = quantize_minor(dec, currency) if dec is not None else None
+        if not amount_minor or amount_minor <= 0:
+            raise ReviewError(422, "Give the amount the order should authorize, for example 12000.00.")
         dup = conn.execute("SELECT * FROM tickets WHERE run_id IS NULL AND kind='raise_po' AND status='open' "
                            "AND supplier_id=?", (supplier_id,)).fetchone()
     if dup:
@@ -819,9 +829,10 @@ def open_standalone_request(conn, kind: str, note: str, requested_by: str,
     conn.execute("BEGIN IMMEDIATE")
     try:
         conn.execute(
-            "INSERT INTO tickets (ticket_id, run_id, kind, note, requested_by, supplier_id, known_pos, subject) "
-            "VALUES (?, NULL, ?, ?, ?, ?, ?, ?)",
-            (ticket_id, kind, (note or "").strip(), requested_by, supplier_id, known, subject))
+            "INSERT INTO tickets (ticket_id, run_id, kind, note, requested_by, supplier_id, known_pos, subject, amount_minor, currency) "
+            "VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (ticket_id, kind, (note or "").strip(), requested_by, supplier_id, known, subject,
+             amount_minor, currency if kind == "raise_po" else None))
         conn.execute("COMMIT")
     except BaseException:
         conn.execute("ROLLBACK")
@@ -838,10 +849,17 @@ def _standalone_fulfilled(conn, row: dict) -> tuple[bool, str | None]:
         return False, None
     if row["kind"] == "raise_po":
         known = set(json.loads(row.get("known_pos") or "[]"))
-        new = [r["po_id"] for r in conn.execute(
-            "SELECT po_id FROM pos WHERE supplier_id=? AND status='open'", (row.get("supplier_id"),)) if r["po_id"] not in known]
+        want, cur = row.get("amount_minor") or 0, row.get("currency")
+        new = [r for r in conn.execute(
+            "SELECT po_id, amount_minor, currency FROM pos WHERE supplier_id=? AND status='open'", (row.get("supplier_id"),))
+            if r["po_id"] not in known]
+        good = [r for r in new if (not cur or r["currency"] == cur) and r["amount_minor"] >= want]
+        if good:
+            r = good[0]
+            return True, f"Order {r['po_id']} ({_fmt_money(r['amount_minor'], r['currency'])}) is available for {row.get('subject') or 'the supplier'}."
         if new:
-            return True, f"Order {', '.join(new)} is available for {row.get('subject') or 'the supplier'}."
+            r = new[0]
+            return False, f"{r['po_id']} was added, but the request asked for {_fmt_money(want, cur)}; {_fmt_money(r['amount_minor'], r['currency'])} does not cover it."
         return False, None
     return False, None
 

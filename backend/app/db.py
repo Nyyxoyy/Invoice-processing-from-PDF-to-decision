@@ -115,7 +115,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     resolved_at     TEXT,
     supplier_id     TEXT,                 -- the supplier the request is about (pinned at creation)
     known_pos       TEXT,                 -- JSON: orders that already existed when the request was made
-    subject         TEXT                  -- e.g. the supplier name to onboard, for standalone requests
+    subject         TEXT,                 -- e.g. the supplier name to onboard, for standalone requests
+    amount_minor    INTEGER,              -- requested order amount (standalone raise_po)
+    currency        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS policies (
@@ -141,6 +143,8 @@ MIGRATIONS = [
     ("tickets", "supplier_id", "ALTER TABLE tickets ADD COLUMN supplier_id TEXT", None),
     ("tickets", "known_pos", "ALTER TABLE tickets ADD COLUMN known_pos TEXT", None),
     ("tickets", "subject", "ALTER TABLE tickets ADD COLUMN subject TEXT", None),
+    ("tickets", "amount_minor", "ALTER TABLE tickets ADD COLUMN amount_minor INTEGER", None),
+    ("tickets", "currency", "ALTER TABLE tickets ADD COLUMN currency TEXT", None),
 ]
 
 
@@ -158,7 +162,7 @@ def _relax_ticket_run(conn: sqlite3.Connection) -> None:
             ticket_id TEXT PRIMARY KEY, run_id TEXT REFERENCES runs(run_id), kind TEXT NOT NULL,
             note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', requested_by TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now')), resolved_by TEXT, resolution_note TEXT,
-            resolved_at TEXT, supplier_id TEXT, known_pos TEXT, subject TEXT);
+            resolved_at TEXT, supplier_id TEXT, known_pos TEXT, subject TEXT, amount_minor INTEGER, currency TEXT);
         INSERT INTO tickets_new (ticket_id, run_id, kind, note, status, requested_by, created_at, resolved_by,
             resolution_note, resolved_at, supplier_id, known_pos)
           SELECT ticket_id, run_id, kind, note, status, requested_by, created_at, resolved_by,
