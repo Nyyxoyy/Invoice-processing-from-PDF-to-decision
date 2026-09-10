@@ -1,0 +1,131 @@
+{
+  "case": "junk-text",
+  "fixture": "junk-text.pdf",
+  "uploaded_as": "junk-text.pdf",
+  "http_status": 200,
+  "model_calls": 0,
+  "observed": "HTTP 200 · REJECT [UNSUPPORTED_DOCUMENT_TYPE] · type “not an invoice” · 0 model calls · nothing posted",
+  "api_response": {
+    "run_id": "run_e8fb1369b50f",
+    "invoice_id": null,
+    "route": "REJECT",
+    "codes": [
+      "UNSUPPORTED_DOCUMENT_TYPE"
+    ],
+    "explanation": "Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.",
+    "posted": false
+  },
+  "run": {
+    "run_id": "run_e8fb1369b50f",
+    "document_id": "doc_593e2e530b9e",
+    "invoice_id": null,
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "rejected",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:47:42",
+    "finished_at": "2026-09-10 21:47:42",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "junk-text.pdf",
+    "confidence": {
+      "score": null,
+      "band": "unavailable",
+      "reasons": [
+        "No completed extraction available."
+      ]
+    },
+    "snapshot": {
+      "codes": [
+        "UNSUPPORTED_DOCUMENT_TYPE"
+      ]
+    }
+  },
+  "fields": null,
+  "diagnosis": null,
+  "context": null,
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "INGEST",
+      "event_type": "classified",
+      "payload": {
+        "pages": 1,
+        "page_kinds": [
+          "text"
+        ],
+        "garbled_pages": [],
+        "extraction_revision_id": "xr_9ec9c3a50848",
+        "blocks": 6
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "not_invoice",
+        "invoice_like": false,
+        "label": "not an invoice",
+        "reasons": [
+          "None of the things every invoice carries were found: the word “invoice” (in any supported language), monetary amounts, a total or amount due, a currency or tax line.",
+          "Nothing was sent to the reading model and nothing needs filling in."
+        ],
+        "signals": {
+          "invoice_words": 0,
+          "total_words": 0,
+          "tax_words": 0,
+          "billing_words": 0,
+          "amounts": 0,
+          "amounts_any": 0,
+          "monetary": {
+            "decimal": 0,
+            "currency_adjacent": 0,
+            "grouped_integer": 0
+          },
+          "currency_marks": 0,
+          "dates": 0,
+          "invoice_numbers": [],
+          "chars": 240,
+          "blank_pages": [],
+          "page_kinds": [
+            "text"
+          ]
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "REJECT",
+        "codes": [
+          "UNSUPPORTED_DOCUMENT_TYPE"
+        ],
+        "explanation": "Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.",
+        "posted": false
+      }
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": null,
+        "band": "unavailable",
+        "reasons": [
+          "No completed extraction available."
+        ]
+      }
+    }
+  ]
+}

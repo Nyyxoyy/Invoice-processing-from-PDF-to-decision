@@ -21,18 +21,20 @@ REVIEWER = {"Authorization": "Bearer reviewer-demo"}
 
 def test_public_and_protected_paths(client):
     assert client.get("/api/health").status_code == 200
-    assert client.get("/api/auth/config").json()["dev_mode"] is True
+    assert client.get("/api/auth/config").json()["open_access"] is True
     assert client.get("/api/runs").status_code == 401                    # no token
     assert client.get("/api/runs", headers={"Authorization": "Bearer nope"}).status_code == 401
     assert client.get("/api/runs", headers=REVIEWER).status_code == 200
     assert client.get("/api/runs", headers=ADMIN).status_code == 200
 
 
-def test_login_resolves_role(client):
-    r = client.post("/api/auth/login", json={"code": "reviewer-demo"})
-    assert r.status_code == 200 and r.json()["role"] == "reviewer"
-    assert client.post("/api/auth/login", json={"code": "wrong"}).status_code == 401
-    assert client.get("/api/auth/me", headers=ADMIN).json()["role"] == "admin"
+def test_role_is_the_token_no_passwords(client):
+    """Open demo: the bearer token is the role name; legacy demo codes alias it."""
+    assert client.get("/api/auth/me", headers={"Authorization": "Bearer reviewer"}).json()["role"] == "reviewer"
+    assert client.get("/api/auth/me", headers={"Authorization": "Bearer admin"}).json()["role"] == "admin"
+    assert client.get("/api/auth/me", headers=ADMIN).json()["role"] == "admin"          # alias
+    assert client.get("/api/auth/me", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert client.post("/api/auth/login", json={"code": "x"}).status_code in (404, 405)  # gone
 
 
 def test_reviewer_cannot_touch_master_data_or_reset(client):
@@ -74,15 +76,12 @@ def test_admin_master_data_and_po_guards(client):
     assert client.get("/api/queue/procurement", headers=ADMIN).status_code == 200
 
 
-def test_production_codes_from_env(tmp_path, monkeypatch):
+def test_role_query_param_only_on_page_images(tmp_path, monkeypatch):
     monkeypatch.setattr(main_mod, "DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ADMIN_ACCESS_CODE", "s3cret-admin")
-    monkeypatch.setenv("REVIEWER_ACCESS_CODE", "s3cret-review")
     with TestClient(main_mod.app) as c:
-        cfg = c.get("/api/auth/config").json()
-        assert cfg["dev_mode"] is False and cfg["dev_codes"] is None   # never leak real codes
-        assert c.get("/api/runs", headers={"Authorization": "Bearer admin-demo"}).status_code == 401
-        assert c.get("/api/runs", headers={"Authorization": "Bearer s3cret-admin"}).status_code == 200
+        # <img> cannot send headers: the role may ride the page route's query string, nowhere else
+        assert c.get("/api/runs?role=admin").status_code == 401
+        assert c.get("/api/runs/nope/page/1?role=reviewer").status_code == 404
 
 
 def test_master_data_endpoints_settle_requests_and_stamp_the_frontend_version(client, tmp_path):
@@ -201,3 +200,13 @@ def test_aliases_are_admin_master_data(client):
     listed = next(v for v in client.get("/api/vendors", headers=REVIEWER).json() if v["supplier_id"] == "sup-northwind")
     assert "white group" in listed["aliases"]
     assert client.patch("/api/vendors/sup-globex", json={"add_aliases": ["white group"]}, headers=ADMIN).status_code == 409
+
+
+@pytest.mark.parametrize('path', ['/onboarding', '/onboarding/dataset', '/app'])
+def test_entry_routes_reload_without_auth_headers(client, path):
+    response = client.get(path)
+    assert response.status_code == 200
+    assert 'text/html' in response.headers['content-type']
+    assert '/static/app.js' in response.text
+    # Public page shells do not make invoice data public.
+    assert client.get('/api/runs').status_code == 401

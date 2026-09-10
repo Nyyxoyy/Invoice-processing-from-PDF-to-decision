@@ -13,7 +13,3 @@ services:
         value: /data
       - key: GEMINI_API_KEY
         sync: false          # set in the Render dashboard, never in the repo
-      - key: ADMIN_ACCESS_CODE
-        sync: false
-      - key: REVIEWER_ACCESS_CODE
-        sync: false

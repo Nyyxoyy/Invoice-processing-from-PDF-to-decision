@@ -1,0 +1,198 @@
+[
+  {
+    "name": "01-clean-approve.pdf",
+    "title": "Clean match",
+    "blurb": "Northwind invoice that matches PO-1001 exactly.",
+    "category": "Approves automatically",
+    "expect": "approved"
+  },
+  {
+    "name": "02-small-overage-exception.pdf",
+    "title": "Small overage",
+    "blurb": "Initech bills $5,200 against a $5,000 order: 4% over, inside the exception band.",
+    "category": "Approves automatically",
+    "expect": "approved"
+  },
+  {
+    "name": "03-eur-approve.pdf",
+    "title": "Euro invoice",
+    "blurb": "Zencorporations bills EUR 1,190 against PO-2001 (EUR).",
+    "category": "Approves automatically",
+    "expect": "approved"
+  },
+  {
+    "name": "10-blocked-supplier.pdf",
+    "title": "Blocked supplier",
+    "blurb": "Shady Imports is blocked in the supplier list.",
+    "category": "Supplier and purchase order",
+    "expect": "rejected"
+  },
+  {
+    "name": "11-unknown-supplier.pdf",
+    "title": "Unknown supplier",
+    "blurb": "Acme Widgets is not in the supplier list; procurement is asked to onboard it.",
+    "category": "Supplier and purchase order",
+    "expect": "held"
+  },
+  {
+    "name": "12-closed-po.pdf",
+    "title": "Closed purchase order",
+    "blurb": "Northwind references PO-1004, which is closed.",
+    "category": "Supplier and purchase order",
+    "expect": "held"
+  },
+  {
+    "name": "13-po-belongs-to-other-supplier.pdf",
+    "title": "PO belongs to another supplier",
+    "blurb": "Globex references PO-1001, a Northwind order.",
+    "category": "Supplier and purchase order",
+    "expect": "held"
+  },
+  {
+    "name": "14-no-po-reference.pdf",
+    "title": "No purchase order",
+    "blurb": "Globex invoice with no order reference at all.",
+    "category": "Supplier and purchase order",
+    "expect": "held"
+  },
+  {
+    "name": "15-two-po-references.pdf",
+    "title": "Two order references",
+    "blurb": "Globex lists PO-1002 and PO-1001 on one invoice.",
+    "category": "Supplier and purchase order",
+    "expect": "held"
+  },
+  {
+    "name": "16-over-budget.pdf",
+    "title": "Over budget",
+    "blurb": "Initech bills $6,000 against a $5,000 order: 20% over, beyond any tolerance.",
+    "category": "Supplier and purchase order",
+    "expect": "held"
+  },
+  {
+    "name": "20-math-mismatch.pdf",
+    "title": "Totals don’t add up",
+    "blurb": "Subtotal $1,000 + tax $80 but total says $1,200.",
+    "category": "Amounts and currency",
+    "expect": "held"
+  },
+  {
+    "name": "21-missing-total.pdf",
+    "title": "Missing total",
+    "blurb": "No total line anywhere on the invoice.",
+    "category": "Amounts and currency",
+    "expect": "held"
+  },
+  {
+    "name": "22-no-currency.pdf",
+    "title": "Currency not stated",
+    "blurb": "Amounts without a currency symbol or code.",
+    "category": "Amounts and currency",
+    "expect": "held"
+  },
+  {
+    "name": "23-currency-mismatch.pdf",
+    "title": "Currency mismatch",
+    "blurb": "Zencorporations bills in USD against a EUR order.",
+    "category": "Amounts and currency",
+    "expect": "held"
+  },
+  {
+    "name": "30-duplicate-invoice-number.pdf",
+    "title": "Same invoice number again",
+    "blurb": "A second Northwind file reusing invoice number NW-2026-0101. Run “Clean match” first.",
+    "category": "Duplicates",
+    "expect": "rejected"
+  },
+  {
+    "name": "31-identical-file.pdf",
+    "title": "Identical file",
+    "blurb": "Byte-for-byte copy of “Clean match”. Run that one first.",
+    "category": "Duplicates",
+    "expect": "rejected"
+  },
+  {
+    "name": "40-scanned-invoice.pdf",
+    "title": "Scanned invoice",
+    "blurb": "Image-only page: read by vision, every value must be confirmed against the image.",
+    "category": "Document quality",
+    "expect": "held"
+  },
+  {
+    "name": "41-credit-note.pdf",
+    "title": "Credit note",
+    "blurb": "A credit note, not an invoice — outside this desk’s process.",
+    "category": "Document quality",
+    "expect": "rejected"
+  },
+  {
+    "name": "42-not-an-invoice.pdf",
+    "title": "Not an invoice",
+    "blurb": "A price quote. The document gate stops it before any model call.",
+    "category": "Document quality",
+    "expect": "rejected"
+  },
+  {
+    "name": "43-encrypted.pdf",
+    "title": "Password-protected",
+    "blurb": "Encrypted PDF the server cannot open — a failed reading with recovery options.",
+    "category": "Document quality",
+    "expect": "failed"
+  },
+  {
+    "name": "44-prompt-injection.pdf",
+    "title": "Hidden instructions",
+    "blurb": "Unknown supplier plus invisible text telling the AI to approve. Rules decide, not the text.",
+    "category": "Document quality",
+    "expect": "held"
+  },
+  {
+    "name": "50-split-a.pdf",
+    "title": "Split delivery A",
+    "blurb": "Three Globex deliveries against the $30,000 PO-1002: 12,000 + 11,500 + 7,600. The third tips the order 3.7% over — approved as an exception. Run all three as a batch.",
+    "category": "Batch: split delivery",
+    "expect": "approved"
+  },
+  {
+    "name": "50-split-b.pdf",
+    "title": "Split delivery B",
+    "blurb": "Three Globex deliveries against the $30,000 PO-1002: 12,000 + 11,500 + 7,600. The third tips the order 3.7% over — approved as an exception. Run all three as a batch.",
+    "category": "Batch: split delivery",
+    "expect": "approved"
+  },
+  {
+    "name": "50-split-c.pdf",
+    "title": "Split delivery C",
+    "blurb": "Three Globex deliveries against the $30,000 PO-1002: 12,000 + 11,500 + 7,600. The third tips the order 3.7% over — approved as an exception. Run all three as a batch.",
+    "category": "Batch: split delivery",
+    "expect": "approved"
+  },
+  {
+    "name": "invoice-0-4.pdf",
+    "title": "Real invoice, three POs",
+    "blurb": "Real-world invoice: no currency stated, references three orders.",
+    "category": "Real-world documents",
+    "expect": "varies"
+  },
+  {
+    "name": "invoice-1-3.pdf",
+    "title": "Real EUR invoice, no PO",
+    "blurb": "Real-world EUR invoice with no order reference.",
+    "category": "Real-world documents",
+    "expect": "varies"
+  },
+  {
+    "name": "clean-01.pdf",
+    "title": "Original clean sample",
+    "blurb": "The first demo invoice: Northwind against PO-1001.",
+    "category": "Real-world documents",
+    "expect": "varies"
+  },
+  {
+    "name": "90-bundle.zip",
+    "title": "ZIP bundle",
+    "blurb": "Four PDFs and a text file in one archive — shows batch intake and skipping.",
+    "category": "Batch: ZIP archive",
+    "expect": "mixed"
+  }
+]

@@ -16,7 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from .db import connect
-from .auth import ROLES, access_codes, auth_gate, current_user, require_admin, require_reviewer, resolve_user
+from .auth import ROLES, auth_gate, current_user, require_admin, require_reviewer
 from .normalize import display_values, unusable_reason
 from .review import (TICKET_KINDS, ReviewError, attest_fields, budget_forecast, confirm_not_duplicate, correct_field,
                      create_po, delete_po, invoice_gross_minor,
@@ -24,6 +24,8 @@ from .review import (TICKET_KINDS, ReviewError, attest_fields, budget_forecast, 
                      onboard_vendor, open_standalone_request, open_ticket, po_candidates, procurement_asks, procurement_queue, reevaluate, reject,
                      resolve_ticket, settle_requests, update_po, update_vendor)
 from .pipeline import OperationalFailure, process_document, startup_recovery
+from .intake import BatchRegistry, IntakeError, expand_uploads
+from .sources import build_sources, describe_sources, get_source
 from .ledger import CommitResult
 from .policy import DEFAULT_POLICY
 
@@ -32,7 +34,9 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def seed_if_empty(conn) -> None:
+    from .demo_data import seed_reviewer_demo
     if conn.execute("SELECT COUNT(*) c FROM vendors").fetchone()["c"]:
+        seed_reviewer_demo(conn)
         return
     vendors = [
         ("sup-northwind", "Northwind Supplies LLC", "approved", "US", '["northwind supplies llc", "northwind supplies"]'),
@@ -50,6 +54,7 @@ def seed_if_empty(conn) -> None:
         ("PO-2001", "sup-zencorp", "EUR", 500_000, "open"),       # EUR 5,000
     ]
     conn.executemany("INSERT INTO pos (po_id, supplier_id, currency, amount_minor, status) VALUES (?,?,?,?,?)", pos)
+    seed_reviewer_demo(conn)
 
 
 def load_env_file() -> None:
@@ -74,7 +79,19 @@ async def lifespan(app: FastAPI):
     app.state.conn = conn
     app.state.work_lock = threading.Lock()  # single bounded worker: one pipeline at a time
     app.state.interrupted_on_boot = interrupted
+    app.state.batches = BatchRegistry(conn, app.state.work_lock, process_document, DEFAULT_POLICY, DATA_DIR)
+    sources = build_sources(DATA_DIR)
+
+    def folder_pickup(parts):
+        try:
+            app.state.batches.start(expand_uploads(parts), "watched-folder")
+        except IntakeError:
+            pass  # every part was unusable; the files are already in rejected/
+    if os.environ.get("INTAKE_FOLDER_DISABLED") != "1":
+        sources["folder"].start(folder_pickup)
     yield
+    sources["folder"].stop()
+    app.state.batches.shutdown()
     conn.close()
 
 
@@ -110,27 +127,11 @@ async def static_no_stale_cache(request, call_next):
     return response
 
 
-class LoginBody(BaseModel):
-    code: str
-
-
 @app.get("/api/auth/config")
 def auth_config():
-    codes, dev = access_codes()
-    return {
-        "dev_mode": dev,
-        "roles": [{"role": r, **meta} for r, meta in ROLES.items()],
-        # demo codes are only revealed when the server is running on defaults
-        "dev_codes": codes if dev else None,
-    }
-
-
-@app.post("/api/auth/login")
-def auth_login(body: LoginBody):
-    user = resolve_user(body.code.strip())
-    if user is None:
-        raise HTTPException(401, "That access code is not recognised.")
-    return {"token": body.code.strip(), **user}
+    """Open demo: no passwords. Roles are switched from the top bar and the
+    bearer token is the role name; the server enforces each role's limits."""
+    return {"open_access": True, "roles": [{"role": r, **meta} for r, meta in ROLES.items()]}
 
 
 @app.get("/api/auth/me")
@@ -169,6 +170,126 @@ async def upload_invoice(file: UploadFile, user: dict = Depends(require_reviewer
     }
 
 
+# ---- bulk intake: several PDFs or a ZIP -----------------------------------
+class ImportBody(BaseModel):
+    ids: list[str] = []
+    urls: list[str] = []
+
+
+def _start_batch(parts: list[tuple[str, bytes]], user: dict) -> dict:
+    try:
+        items = expand_uploads(parts)
+    except IntakeError as e:
+        raise HTTPException(e.status, e.message)
+    batch = app.state.batches.start(items, user["role"])
+    return batch.public()
+
+
+@app.post("/api/invoices/batch")
+async def upload_batch(files: list[UploadFile], user: dict = Depends(require_reviewer)):
+    """Many PDFs and/or ZIP archives in one request. Validates and expands
+    synchronously, processes in the background; poll GET /api/batches/{id}."""
+    parts = [(f.filename or "upload", await f.read()) for f in files]
+    return _start_batch(parts, user)
+
+
+@app.get("/api/batches")
+def list_batches(user: dict = Depends(require_reviewer)):
+    return app.state.batches.list()
+
+
+@app.get("/api/batches/{batch_id}")
+def batch_detail(batch_id: str):
+    batch = app.state.batches.get(batch_id)
+    if batch is None:
+        raise HTTPException(404, "This batch is no longer tracked. Its finished invoices are in the inbox.")
+    return batch.public()
+
+
+@app.get("/api/sources")
+def list_sources():
+    """Remote intake sources and whether each is connected (see sources.py)."""
+    return describe_sources()
+
+
+@app.get("/api/sources/{kind}/files")
+def source_files(kind: str, user: dict = Depends(require_reviewer)):
+    try:
+        return [f.public() if hasattr(f, "public") else f for f in get_source(kind).list_files()]
+    except IntakeError as e:
+        raise HTTPException(e.status, e.message)
+
+
+class FolderSettings(BaseModel):
+    dir: str | None = None
+    reset: bool = False
+
+
+@app.post("/api/sources/folder/settings")
+def folder_settings(body: FolderSettings, user: dict = Depends(current_user)):
+    """Point the watched folder somewhere else (any signed-in user; it is a
+    demo workspace setting, not master data). Persisted in DATA_DIR."""
+    src = get_source("folder")
+    try:
+        return src.reset_dir() if body.reset else src.set_dir(body.dir or "")
+    except IntakeError as e:
+        raise HTTPException(e.status, e.message)
+
+
+@app.post("/api/sources/{kind}/import")
+async def source_import(kind: str, body: ImportBody, user: dict = Depends(require_reviewer)):
+    """Import from a connector as a batch. `ids` selects listed files (folder
+    entries, mailbox messages, Drive ids, GCS object names); `urls` is for
+    the paste-a-link connector. The watched folder accepts an empty selection
+    and takes everything waiting."""
+    try:
+        source = get_source(kind)
+        if kind == "link":
+            selection = body.urls
+            if not selection:
+                raise IntakeError(422, "Paste at least one link.")
+        else:
+            selection = body.ids
+            if not selection and kind != "folder":
+                raise IntakeError(422, "Choose at least one file to import.")
+        parts = await run_in_threadpool(source.fetch, selection[:50])
+    except IntakeError as e:
+        raise HTTPException(e.status, e.message)
+    return _start_batch(parts, user)
+
+
+@app.get("/api/edge-cases")
+def edge_cases():
+    """The catalogue of faulty-document cases the product handles, with the
+    limits it enforces — served from code so the page never drifts from the
+    behaviour."""
+    from .edge_cases import catalogue
+    return catalogue()
+
+
+@app.get("/api/edge-cases/result/{name}")
+def edge_case_result(name: str):
+    """The saved result of one probe upload, rendered by the Edge cases page.
+    Nothing is processed: this is the record of a run that already happened."""
+    from .edge_cases import saved_result
+    result = saved_result(name)
+    if result is None:
+        raise HTTPException(404, "no such saved result")
+    return result
+
+
+@app.get("/api/edge-cases/fixture/{name}")
+def edge_case_fixture(name: str):
+    """The exact file the probe uploaded for a case, so a claim can be
+    re-checked by hand."""
+    from .edge_cases import fixture_path
+    path = fixture_path(name)
+    if path is None:
+        raise HTTPException(404, "no such fixture")
+    media = "application/pdf" if path.suffix == ".pdf" else "application/octet-stream"
+    return FileResponse(str(path), media_type=media, filename=path.name)
+
+
 @app.get("/api/runs")
 def list_runs():
     rows = app.state.conn.execute(
@@ -187,13 +308,17 @@ def list_runs():
             item['summary']['currency'] = (context.get('currency') or {}).get('code')
         from .normalize import display_values
         item['display'] = display_values(item['summary'], (context.get('currency') or {}).get('code'))
+        from .automation import saved_confidence
+        item['confidence'] = saved_confidence(app.state.conn, item['run_id'])
         result.append(item)
     return result
 
 
 @app.post('/api/runs/{run_id}/retry')
-async def retry_run(run_id: str, user: dict = Depends(require_reviewer)):
-    """Retry an interrupted/unreadable attempt without erasing its history."""
+async def retry_run(run_id: str, as_invoice: bool = False, user: dict = Depends(require_reviewer)):
+    """Retry an interrupted/unreadable attempt without erasing its history.
+    ``as_invoice`` re-reads a document the type gate rejected as "not an
+    invoice", skipping that gate (reviewer override, recorded on the run)."""
     def work():
         with app.state.work_lock:
             row = app.state.conn.execute(
@@ -203,7 +328,7 @@ async def retry_run(run_id: str, user: dict = Depends(require_reviewer)):
                 raise HTTPException(404, 'Invoice not found')
             try:
                 result = process_document(app.state.conn, row['bytes_path'], row['filename'],
-                                          DEFAULT_POLICY, DATA_DIR, retry_of=run_id)
+                                          DEFAULT_POLICY, DATA_DIR, retry_of=run_id, as_invoice=as_invoice)
             except ValueError as e:
                 raise HTTPException(409, str(e))
             except OperationalFailure as e:
@@ -222,6 +347,8 @@ def run_detail(run_id: str):
     events = app.state.conn.execute(
         "SELECT seq, ts, stage, event_type, payload FROM run_events WHERE run_id=? ORDER BY seq", (run_id,)).fetchall()
     out = dict(run)
+    from .automation import saved_confidence
+    out["confidence"] = saved_confidence(app.state.conn, run_id)
     out["snapshot"] = json.loads(out.pop("snapshot_json") or "null")
     out["events"] = [{**dict(e), "payload": json.loads(e["payload"])} for e in events]
     return out
@@ -244,6 +371,7 @@ def delete_run(run_id: str, user: dict = Depends(require_admin)):
             raise HTTPException(409, "this run posted an amount to the ledger — posted runs cannot be deleted (use reset to clear the whole demo workspace)")
         conn.execute("BEGIN IMMEDIATE")
         try:
+            conn.execute("DELETE FROM tickets WHERE run_id=?", (run_id,))
             conn.execute("DELETE FROM field_revisions WHERE run_id=?", (run_id,))
             conn.execute("DELETE FROM run_events WHERE run_id=?", (run_id,))
             conn.execute("UPDATE runs SET parent_run_id=NULL WHERE parent_run_id=?", (run_id,))
@@ -405,17 +533,32 @@ def demo_reset(user: dict = Depends(require_admin)):
     with app.state.work_lock:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for table in ("field_revisions", "run_events", "ledger_events", "runs", "invoices", "documents", "pos", "vendors"):
+            for table in ("field_revisions", "run_events", "ledger_events", "tickets", "runs", "invoices",
+                          "documents", "pos", "vendors"):
                 conn.execute(f"DELETE FROM {table}")
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
             raise
         seed_if_empty(conn)
-    return {"ok": True}
+        # stored originals and extraction evidence belong to the rows just removed
+        removed = 0
+        for sub in ("pdfs", "evidence"):
+            folder = Path(DATA_DIR) / sub
+            if folder.is_dir():
+                for f in folder.iterdir():
+                    if f.is_file():
+                        f.unlink()
+                        removed += 1
+        if getattr(app.state, "batches", None) is not None:
+            app.state.batches._batches.clear()
+    return {"ok": True, "files_removed": removed}
 
 
 @app.get("/")
+@app.get("/onboarding")
+@app.get("/onboarding/dataset")
+@app.get("/app")
 def index():
     return FileResponse(Path(__file__).parent / "static" / "index.html")
 
@@ -620,27 +763,72 @@ def audit_feed(limit: int = 100):
 
 
 SAMPLES_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "pdfs"
-SAMPLE_BLURBS = {
-    "clean-01.pdf": "A clean Northwind invoice that matches PO-1001 — approves automatically",
-    "invoice-0-4.pdf": "Real-world invoice: no currency stated, references three POs — holds for review",
-    "invoice-1-3.pdf": "Real-world EUR invoice with no PO reference — holds until a reviewer picks one",
-}
+
+
+def sample_manifest() -> list[dict]:
+    """The sample library: one PDF per situation a reviewer can meet, generated
+    by tools/make_samples.py with a manifest (title, blurb, category, expected
+    outcome). Files present on disk but not in the manifest are listed too."""
+    manifest_path = SAMPLES_DIR / "samples.json"
+    entries: list[dict] = []
+    if manifest_path.exists():
+        try:
+            entries = [e for e in json.loads(manifest_path.read_text()) if (SAMPLES_DIR / e["name"]).exists()]
+        except (ValueError, KeyError):
+            entries = []
+    demo_catalog = SAMPLES_DIR.parent / "reviewer-demo.json"
+    if demo_catalog.exists():
+        demo_entries = json.loads(demo_catalog.read_text())
+        demo_names = {e["name"] for e in demo_entries}
+        entries = [e for e in entries if e["name"] not in demo_names]
+        entries.extend(e for e in demo_entries if (SAMPLES_DIR / e["name"]).is_file())
+    listed = {e["name"] for e in entries}
+    if SAMPLES_DIR.exists():
+        for f in sorted(SAMPLES_DIR.glob("*")):
+            if f.suffix.lower() in (".pdf", ".zip") and f.name not in listed:
+                entries.append({"name": f.name, "title": f.stem.replace("-", " ").replace("_", " "),
+                                "blurb": "Sample document", "category": "Other samples", "expect": "varies"})
+    return entries
+
+
+def _sample_path(name: str) -> Path:
+    path = (SAMPLES_DIR / name).resolve()
+    if not str(path).startswith(str(SAMPLES_DIR.resolve())) or not path.is_file():
+        raise HTTPException(404, "no such sample")
+    return path
+
+
+class SampleBatchBody(BaseModel):
+    names: list[str]
 
 
 @app.get("/api/samples")
 def list_samples():
-    out = []
-    if SAMPLES_DIR.exists():
-        for f in sorted(SAMPLES_DIR.glob("*.pdf")):
-            out.append({"name": f.name, "blurb": SAMPLE_BLURBS.get(f.name, "Sample invoice PDF")})
-    return out
+    entries = sample_manifest()
+    bundle = next((e for e in entries if e.get("onboarding") and e.get("recommended")), None)
+    if not bundle:
+        return []
+    included = set(bundle.get("members", [])) | {bundle["name"]}
+    # Test expectations stay in the internal fixture manifest, never the product catalog.
+    return [{k: v for k, v in e.items() if k not in ("expect", "next_step")}
+            for e in entries if e["name"] in included]
+
+
+@app.post("/api/samples/run-batch")
+def run_samples_batch(body: SampleBatchBody, user: dict = Depends(require_reviewer)):
+    """Run several samples (PDFs and/or the ZIP bundle) as one batch — the same
+    path a multi-file upload takes, so results land in the inbox one by one."""
+    if not body.names:
+        raise HTTPException(422, "Choose at least one sample.")
+    parts = [(p.name, p.read_bytes()) for p in (_sample_path(n) for n in dict.fromkeys(body.names))]
+    return _start_batch(parts, user)
 
 
 @app.post("/api/samples/{name}/run")
 async def run_sample(name: str, user: dict = Depends(require_reviewer)):
-    path = (SAMPLES_DIR / name).resolve()
-    if not str(path).startswith(str(SAMPLES_DIR.resolve())) or not path.exists():
-        raise HTTPException(404, "no such sample")
+    path = _sample_path(name)
+    if path.suffix.lower() != ".pdf":
+        raise HTTPException(422, "Archives run as a batch. Use the batch action for this sample.")
 
     def work():
         with app.state.work_lock:

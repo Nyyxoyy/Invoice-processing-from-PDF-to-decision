@@ -1,0 +1,708 @@
+{
+  "case": "missing-fields",
+  "fixture": "unknown-supplier.pdf",
+  "uploaded_as": "unknown-supplier.pdf",
+  "http_status": 200,
+  "model_calls": 1,
+  "observed": "HTTP 200 · HOLD_REVIEW [VENDOR_UNKNOWN, NO_PO_MATCH] · type “invoice” · 1 model call · nothing posted",
+  "api_response": {
+    "run_id": "run_ae4e56e608b4",
+    "invoice_id": null,
+    "route": "HOLD_REVIEW",
+    "codes": [
+      "VENDOR_UNKNOWN",
+      "NO_PO_MATCH"
+    ],
+    "explanation": "Held for review (VENDOR_UNKNOWN). No amount was added to the approved ledger. Next: a reviewer resolves the listed reasons, or the PO/policy is amended.",
+    "posted": false
+  },
+  "run": {
+    "run_id": "run_ae4e56e608b4",
+    "document_id": "doc_cabba33e33a1",
+    "invoice_id": null,
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "held",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:49:09",
+    "finished_at": "2026-09-10 21:49:17",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "unknown-supplier.pdf",
+    "confidence": {
+      "score": 55,
+      "band": "low",
+      "reasons": [
+        "6/6 required fields verified",
+        "Supplier missing, blocked or unverified",
+        "Purchase order missing or does not match",
+        "Totals reconcile"
+      ],
+      "supplier_match": false,
+      "po_match": false,
+      "method": "evidence-v1",
+      "scored_at": "2026-09-10 21:49:17"
+    },
+    "snapshot": {
+      "codes": [
+        "VENDOR_UNKNOWN",
+        "NO_PO_MATCH"
+      ]
+    }
+  },
+  "fields": {
+    "supplier_name": {
+      "field": "supplier_name",
+      "status": "selected",
+      "raw_value": "Mystery Corp Ltd",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b0"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": {
+        "why": "\"Mystery Corp Ltd\" is not in the vendor master.",
+        "codes": [
+          "VENDOR_UNKNOWN"
+        ],
+        "expected": "a vendor from the vendor master, exactly as listed",
+        "suggestion": null,
+        "unusable": null,
+        "suggestions": []
+      },
+      "attestable": false
+    },
+    "buyer_name": {
+      "field": "buyer_name",
+      "status": "selected",
+      "raw_value": "Acme Corporation",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b4"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "invoice_number": {
+      "field": "invoice_number",
+      "status": "selected",
+      "raw_value": "MY-1",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b1"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "invoice_date": {
+      "field": "invoice_date",
+      "status": "selected",
+      "raw_value": "2026-08-28",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b2"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "due_date": {
+      "field": "due_date",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "currency": {
+      "field": "currency",
+      "status": "selected",
+      "raw_value": "USD",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b5"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "po_reference": {
+      "field": "po_reference",
+      "status": "selected",
+      "raw_value": "PO-1001",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b3"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": {
+        "why": "\"PO-1001\" exists, but the supplier could not be resolved so it cannot be confirmed. PO candidates appear once the supplier is resolved.",
+        "codes": [
+          "NO_PO_MATCH"
+        ],
+        "expected": "a purchase order id, e.g. PO-2001",
+        "suggestion": null,
+        "unusable": null,
+        "suggestions": []
+      },
+      "attestable": false
+    },
+    "subtotal_net": {
+      "field": "subtotal_net",
+      "status": "selected",
+      "raw_value": "$6,000.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b6"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "tax_total": {
+      "field": "tax_total",
+      "status": "selected",
+      "raw_value": "$495.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b7"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "shipping_total": {
+      "field": "shipping_total",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "invoice_gross_total": {
+      "field": "invoice_gross_total",
+      "status": "selected",
+      "raw_value": "$6,495.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": "p1.b8"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "amount_due": {
+      "field": "amount_due",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    }
+  },
+  "diagnosis": {
+    "codes": [
+      "VENDOR_UNKNOWN",
+      "NO_PO_MATCH"
+    ],
+    "open_codes": [
+      "VENDOR_UNKNOWN",
+      "NO_PO_MATCH"
+    ],
+    "items": [
+      {
+        "code": "VENDOR_UNKNOWN",
+        "label": "Supplier not in vendor master",
+        "action": "Correct supplier_name to an approved vendor if this is a misread (see Vendors tab). If the supplier is genuinely unknown, Reject — unknown suppliers cannot be paid.",
+        "target": {
+          "kind": "field",
+          "field": "supplier_name"
+        },
+        "fields": [
+          "supplier_name"
+        ],
+        "status": "open"
+      },
+      {
+        "code": "NO_PO_MATCH",
+        "label": "No purchase order confirmed",
+        "action": "Resolve the supplier first (item above), then pick a PO from the candidates.",
+        "target": {
+          "kind": "field",
+          "field": "po_reference"
+        },
+        "fields": [
+          "po_reference"
+        ],
+        "status": "open"
+      }
+    ],
+    "field_problems": {
+      "supplier_name": {
+        "why": "\"Mystery Corp Ltd\" is not in the vendor master.",
+        "codes": [
+          "VENDOR_UNKNOWN"
+        ],
+        "expected": "a vendor from the vendor master, exactly as listed",
+        "suggestion": null,
+        "unusable": null,
+        "suggestions": []
+      },
+      "po_reference": {
+        "why": "\"PO-1001\" exists, but the supplier could not be resolved so it cannot be confirmed. PO candidates appear once the supplier is resolved.",
+        "codes": [
+          "NO_PO_MATCH"
+        ],
+        "expected": "a purchase order id, e.g. PO-2001",
+        "suggestion": null,
+        "unusable": null,
+        "suggestions": []
+      }
+    },
+    "vendor_resolved": false
+  },
+  "context": {
+    "any_scanned": false,
+    "currency": {
+      "code": "USD",
+      "source": "field"
+    },
+    "po_references": [
+      "PO-1001"
+    ]
+  },
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:49:09",
+      "stage": "INGEST",
+      "event_type": "classified",
+      "payload": {
+        "pages": 1,
+        "page_kinds": [
+          "text"
+        ],
+        "garbled_pages": [],
+        "extraction_revision_id": "xr_e34a26a0db4f",
+        "blocks": 9
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:49:09",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "invoice",
+        "invoice_like": true,
+        "label": "invoice",
+        "reasons": [
+          "Invoice wording and monetary amounts are present."
+        ],
+        "signals": {
+          "invoice_words": 2,
+          "total_words": 1,
+          "tax_words": 1,
+          "billing_words": 1,
+          "amounts": 3,
+          "amounts_any": 3,
+          "monetary": {
+            "decimal": 3,
+            "currency_adjacent": 3,
+            "grouped_integer": 0
+          },
+          "currency_marks": 4,
+          "dates": 1,
+          "invoice_numbers": [
+            "MY-1"
+          ],
+          "chars": 176,
+          "blank_pages": [],
+          "page_kinds": [
+            "text"
+          ]
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:49:17",
+      "stage": "EXTRACT",
+      "event_type": "attempts",
+      "payload": {
+        "attempts": [
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": true,
+            "seconds": 2.28,
+            "input_tokens": 302,
+            "output_tokens": 632
+          }
+        ]
+      }
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-10 21:49:17",
+      "stage": "EXTRACT",
+      "event_type": "fields",
+      "payload": {
+        "supplier_name": {
+          "status": "selected",
+          "raw": "Mystery Corp Ltd",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b0"
+          }
+        },
+        "buyer_name": {
+          "status": "selected",
+          "raw": "Acme Corporation",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b4"
+          }
+        },
+        "invoice_number": {
+          "status": "selected",
+          "raw": "MY-1",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b1"
+          }
+        },
+        "invoice_date": {
+          "status": "selected",
+          "raw": "2026-08-28",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b2"
+          }
+        },
+        "due_date": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": null
+          }
+        },
+        "currency": {
+          "status": "selected",
+          "raw": "USD",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b5"
+          }
+        },
+        "po_reference": {
+          "status": "selected",
+          "raw": "PO-1001",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b3"
+          }
+        },
+        "subtotal_net": {
+          "status": "selected",
+          "raw": "$6,000.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b6"
+          }
+        },
+        "tax_total": {
+          "status": "selected",
+          "raw": "$495.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b7"
+          }
+        },
+        "shipping_total": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": null
+          }
+        },
+        "invoice_gross_total": {
+          "status": "selected",
+          "raw": "$6,495.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b8"
+          }
+        },
+        "amount_due": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "ts": "2026-09-10 21:49:17",
+      "stage": "VALIDATE",
+      "event_type": "gates",
+      "payload": {
+        "required_fields_ok": true,
+        "arithmetic_ok": true,
+        "reconciliation": "6000.00 + 495.00 = 6495.00",
+        "structure_supported": true,
+        "scan_gate": false,
+        "ambiguous_date": false,
+        "currency": {
+          "code": "USD",
+          "source": "field",
+          "evidence": {
+            "extraction_revision_id": "xr_e34a26a0db4f",
+            "block_id": "p1.b5"
+          }
+        },
+        "po_references": [
+          "PO-1001"
+        ]
+      }
+    },
+    {
+      "seq": 6,
+      "ts": "2026-09-10 21:49:17",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "HOLD_REVIEW",
+        "codes": [
+          "VENDOR_UNKNOWN",
+          "NO_PO_MATCH"
+        ],
+        "explanation": "Held for review (VENDOR_UNKNOWN). No amount was added to the approved ledger. Next: a reviewer resolves the listed reasons, or the PO/policy is amended.",
+        "posted": false
+      }
+    },
+    {
+      "seq": 7,
+      "ts": "2026-09-10 21:49:17",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": 55,
+        "band": "low",
+        "reasons": [
+          "6/6 required fields verified",
+          "Supplier missing, blocked or unverified",
+          "Purchase order missing or does not match",
+          "Totals reconcile"
+        ],
+        "supplier_match": false,
+        "po_match": false,
+        "method": "evidence-v1",
+        "scored_at": "2026-09-10 21:49:17"
+      }
+    },
+    {
+      "seq": 8,
+      "ts": "2026-09-10 21:49:17",
+      "stage": "REQUEST",
+      "event_type": "ticket_opened",
+      "payload": {
+        "ticket_id": "tk_297f2d2c6715",
+        "kind": "onboard_supplier",
+        "note": "Automatically raised by Invoice AI. The extracted supplier is absent from the supplier register. Onboard the supplier and provide its purchase order.\nExtracted invoice details: {\"supplier_name\": \"Mystery Corp Ltd\", \"buyer_name\": \"Acme Corporation\", \"invoice_number\": \"MY-1\", \"invoice_date\": \"2026-08-28\", \"currency\": \"USD\", \"po_reference\": \"PO-1001\", \"subtotal_net\": \"$6,000.00\", \"tax_total\": \"$495.00\", \"invoice_gross_total\": \"$6,495.00\"}",
+        "actor": "invoice-ai"
+      }
+    }
+  ]
+}

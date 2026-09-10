@@ -1,0 +1,1278 @@
+{
+  "generated_at": "2026-09-10T21:51:25+00:00",
+  "model": "gemini-3.5-flash-lite",
+  "partial_run": [
+    "empty-file"
+  ],
+  "cases": [
+    {
+      "id": "wrong-extension",
+      "group": "intake",
+      "group_title": "1 · Before the file is stored",
+      "title": "Not a .pdf file (image, Word, spreadsheet, e-mail)",
+      "expected": "Refused with “not a PDF”. No run, no record.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:12+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "wrong-extension.png",
+          "uploaded_as": "invoice.pdf",
+          "http_status": 422,
+          "route": null,
+          "codes": [],
+          "run_status": null,
+          "failure_reason": null,
+          "doc_type": null,
+          "doc_type_reason": null,
+          "model_calls": 0,
+          "posted": null,
+          "error": "not a PDF",
+          "fixture_kept": true,
+          "result_file": null,
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "uploaded a PNG renamed to invoice.pdf"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "empty-file",
+      "group": "intake",
+      "group_title": "1 · Before the file is stored",
+      "title": "Empty file (0 bytes)",
+      "expected": "Refused before processing.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:51:25+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "empty-file.pdf",
+          "uploaded_as": "empty-file.pdf",
+          "http_status": 422,
+          "route": null,
+          "codes": [],
+          "run_status": null,
+          "failure_reason": null,
+          "doc_type": null,
+          "doc_type_reason": null,
+          "model_calls": 0,
+          "posted": null,
+          "error": "not a PDF",
+          "fixture_kept": true,
+          "result_file": null,
+          "reader_errors": [],
+          "api_errors": [],
+          "note": null
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "too-large",
+      "group": "intake",
+      "group_title": "1 · Before the file is stored",
+      "title": "File larger than 10 MB",
+      "expected": "Refused with “file too large”.",
+      "status": "handled",
+      "seconds": 0.1,
+      "ran_at": "2026-09-10T21:47:12+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "too-large.pdf",
+          "uploaded_as": "too-large.pdf",
+          "http_status": 413,
+          "route": null,
+          "codes": [],
+          "run_status": null,
+          "failure_reason": null,
+          "doc_type": null,
+          "doc_type_reason": null,
+          "model_calls": 0,
+          "posted": null,
+          "error": "file too large",
+          "fixture_kept": false,
+          "result_file": null,
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "11.0 MB file, built at run time and not stored in the repository"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "already-processing",
+      "group": "intake",
+      "group_title": "1 · Before the file is stored",
+      "title": "Second upload while one is still processing",
+      "expected": "Upload is queued behind the live run; the page shows the run in progress.",
+      "status": "handled",
+      "seconds": 11.1,
+      "ran_at": "2026-09-10T21:50:50+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "concurrent-a.pdf",
+          "uploaded_as": "concurrent-a.pdf",
+          "http_status": 200,
+          "route": "AUTO_APPROVE",
+          "codes": [],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": null,
+          "posted": true,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "already-processing-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "uploaded simultaneously"
+        },
+        {
+          "fixture": "concurrent-b.pdf",
+          "uploaded_as": "concurrent-b.pdf",
+          "http_status": 200,
+          "route": "AUTO_APPROVE",
+          "codes": [],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": null,
+          "posted": true,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "already-processing-2.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "uploaded simultaneously"
+        }
+      ],
+      "note": "both finished in 11.0s; the worker lock serialised them, neither run failed."
+    },
+    {
+      "id": "corrupt",
+      "group": "parse",
+      "group_title": "2 · The PDF cannot be opened or rendered",
+      "title": "Corrupt or truncated PDF",
+      "expected": "Run fails with parse_error and the parser’s error type.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:21+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "corrupt.pdf",
+          "uploaded_as": "corrupt.pdf",
+          "http_status": 422,
+          "route": null,
+          "codes": [],
+          "run_status": "failed",
+          "failure_reason": "parse_error: PdfminerException",
+          "doc_type": null,
+          "doc_type_reason": null,
+          "model_calls": 0,
+          "posted": null,
+          "error": "unreadable PDF (PdfminerException)",
+          "fixture_kept": true,
+          "result_file": "corrupt-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": null
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "encrypted",
+      "group": "parse",
+      "group_title": "2 · The PDF cannot be opened or rendered",
+      "title": "Password-protected PDF",
+      "expected": "Run fails with “encrypted: password required”. The password is never asked for or stored.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:21+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "encrypted.pdf",
+          "uploaded_as": "encrypted.pdf",
+          "http_status": 422,
+          "route": null,
+          "codes": [],
+          "run_status": "failed",
+          "failure_reason": "encrypted: password required",
+          "doc_type": null,
+          "doc_type_reason": null,
+          "model_calls": 0,
+          "posted": null,
+          "error": "the PDF is password-protected",
+          "fixture_kept": true,
+          "result_file": "encrypted-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "user password “secret”; never asked for or stored"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "zero-pages",
+      "group": "parse",
+      "group_title": "2 · The PDF cannot be opened or rendered",
+      "title": "PDF with no pages",
+      "expected": "Run fails with “no_pages”. No model call.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:21+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "zero-pages.pdf",
+          "uploaded_as": "zero-pages.pdf",
+          "http_status": 422,
+          "route": null,
+          "codes": [],
+          "run_status": "failed",
+          "failure_reason": "no_pages: the PDF has no pages",
+          "doc_type": null,
+          "doc_type_reason": null,
+          "model_calls": 0,
+          "posted": null,
+          "error": "the PDF has no pages",
+          "fixture_kept": true,
+          "result_file": "zero-pages-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": null
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "too-many-pages",
+      "group": "parse",
+      "group_title": "2 · The PDF cannot be opened or rendered",
+      "title": "More than 10 pages",
+      "expected": "Run fails with “page_limit”. No model call.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:21+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "too-many-pages.pdf",
+          "uploaded_as": "too-many-pages.pdf",
+          "http_status": 422,
+          "route": null,
+          "codes": [],
+          "run_status": "failed",
+          "failure_reason": "page_limit: 11 > 10",
+          "doc_type": null,
+          "doc_type_reason": null,
+          "model_calls": 0,
+          "posted": null,
+          "error": "page limit exceeded (11 pages)",
+          "fixture_kept": true,
+          "result_file": "too-many-pages-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "11 pages"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "render-error",
+      "group": "parse",
+      "group_title": "2 · The PDF cannot be opened or rendered",
+      "title": "Scanned page that cannot be rasterised",
+      "expected": "Run fails with “render_error”.",
+      "status": "handled",
+      "seconds": 13.8,
+      "ran_at": "2026-09-10T21:47:35+00:00",
+      "verdict": "not_reproduced",
+      "observations": [
+        {
+          "fixture": "render-error.pdf",
+          "uploaded_as": "render-error.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "not an invoice",
+          "doc_type_reason": "The scanned page was read, and it does not state what an invoice states: none of the supplier, invoice number or amounts could be read.",
+          "model_calls": 2,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "render-error-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": " — the damaged file still rasterised, so the run continued normally"
+        }
+      ],
+      "note": "PyMuPDF does not raise on a damaged image stream: it returns whatever it can rasterise, so this run continued and was judged on what the reading found. The render_error branch is real and guards a genuine failure mode (an unreadable page object), but no fixture built here forces it. Treat this row as code-inspection only, not as verified behaviour."
+    },
+    {
+      "id": "interrupted",
+      "group": "parse",
+      "group_title": "2 · The PDF cannot be opened or rendered",
+      "title": "Server restarted mid-reading",
+      "expected": "Nothing was approved; the attempt is kept in history.",
+      "status": "handled",
+      "seconds": 7.5,
+      "ran_at": "2026-09-10T21:50:58+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "interrupted.pdf",
+          "uploaded_as": "interrupted.pdf",
+          "http_status": 200,
+          "route": null,
+          "codes": [],
+          "run_status": "failed",
+          "failure_reason": "interrupted",
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 0,
+          "posted": null,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "interrupted-2.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "run forced back to “running”, then the app was restarted"
+        }
+      ],
+      "note": "the original upload decided AUTO_APPROVE; after the simulated kill the attempt is kept, not deleted."
+    },
+    {
+      "id": "blank",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Blank pages (empty export, failed scan)",
+      "expected": "Rejected as a blank document. No model call.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:42+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "blank.pdf",
+          "uploaded_as": "blank.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "blank document",
+          "doc_type_reason": "All 2 page(s) are empty: no text, no images, no drawings.",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "blank-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": null
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "junk-text",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Unrelated text document (résumé, contract, article, random text)",
+      "expected": "Rejected as “not an invoice”, with the list of signals that were missing. No model call.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:42+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "junk-text.pdf",
+          "uploaded_as": "junk-text.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "not an invoice",
+          "doc_type_reason": "None of the things every invoice carries were found: the word “invoice” (in any supported language), monetary amounts, a total or amount due, a currency or tax line.",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "junk-text-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "purchase-order",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Purchase order",
+      "expected": "Rejected, named as a purchase order.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:42+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "purchase-order.pdf",
+          "uploaded_as": "purchase-order.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "purchase order",
+          "doc_type_reason": "The document calls itself a purchase order (“PURCHASE ORDER”).",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "purchase-order-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "quote",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Quote, estimate or pro forma invoice",
+      "expected": "Rejected, named as a quote or pro forma. A pro forma is not payable even though it says “invoice”.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:42+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "quote.pdf",
+          "uploaded_as": "quote.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "quote or estimate",
+          "doc_type_reason": "The document calls itself a quote or estimate (“QUOTATION”).",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "quote-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        },
+        {
+          "fixture": "proforma.pdf",
+          "uploaded_as": "proforma.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "pro forma invoice",
+          "doc_type_reason": "The document calls itself a pro forma invoice (“PRO FORMA”).",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "quote-2.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "credit-note",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Credit note / credit memo",
+      "expected": "Rejected, named as a credit note. Negative amounts never reach the ledger.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:42+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "credit-note.pdf",
+          "uploaded_as": "credit-note.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "credit note",
+          "doc_type_reason": "The document calls itself a credit note (“CREDIT NOTE”).",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "credit-note-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "statement-delivery-remittance-receipt",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Statement of account, delivery note, packing slip, remittance advice, receipt",
+      "expected": "Rejected, named by type.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:42+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "statement.pdf",
+          "uploaded_as": "statement.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "statement of account",
+          "doc_type_reason": "The document calls itself a statement of account (“STATEMENT OF ACCOUNT”).",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "statement-delivery-remittance-receipt-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        },
+        {
+          "fixture": "delivery-note.pdf",
+          "uploaded_as": "delivery-note.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "delivery note or packing slip",
+          "doc_type_reason": "The document calls itself a delivery note or packing slip (“DELIVERY NOTE”).",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "statement-delivery-remittance-receipt-2.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        },
+        {
+          "fixture": "remittance-advice.pdf",
+          "uploaded_as": "remittance-advice.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "remittance advice",
+          "doc_type_reason": "The document calls itself a remittance advice (“REMITTANCE ADVICE”).",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "statement-delivery-remittance-receipt-3.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        },
+        {
+          "fixture": "receipt.pdf",
+          "uploaded_as": "receipt.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "receipt",
+          "doc_type_reason": "The document calls itself a receipt (“RECEIPT”).",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "statement-delivery-remittance-receipt-4.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "bundle",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Several invoices in one PDF",
+      "expected": "Rejected as a bundle, listing the numbers found.",
+      "status": "handled",
+      "seconds": 0.0,
+      "ran_at": "2026-09-10T21:47:42+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "bundle.pdf",
+          "uploaded_as": "bundle.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "several invoices in one file",
+          "doc_type_reason": "2 different invoice numbers were found on different pages: NW-1, NW-2.",
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "bundle-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "0 field revisions saved (a review form needs at least one)"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "scan-nothing-found",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Scanned image that is not an invoice (photo, letter, drawing)",
+      "expected": "Rejected as “not an invoice” after the reading; no review form and no fields to correct.",
+      "status": "handled",
+      "seconds": 13.7,
+      "ran_at": "2026-09-10T21:47:55+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "scan-not-an-invoice.pdf",
+          "uploaded_as": "scan-not-an-invoice.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "not an invoice",
+          "doc_type_reason": "The page was read twice and reads as not an invoice.",
+          "model_calls": 2,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "scan-nothing-found-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "image-only page; 0 field revisions saved"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "override",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "False alarm: a real invoice rejected as “not an invoice”",
+      "expected": "“Read as an invoice anyway” starts a new attempt that skips the type gate. The override is recorded on the run.",
+      "status": "handled",
+      "seconds": 7.1,
+      "ran_at": "2026-09-10T21:51:05+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "override-purchase-order.pdf",
+          "uploaded_as": null,
+          "http_status": 200,
+          "route": "HELD",
+          "codes": [
+            "NO_PO_MATCH",
+            "MISSING_FIELD"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "purchase order",
+          "doc_type_reason": "The reviewer asked for this document to be read as an invoice.",
+          "model_calls": 1,
+          "posted": null,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "override-2.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "override recorded on the run: forced=True; parent run linked: True; a plain retry without the override is refused with HTTP 409"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "non-english",
+      "group": "doctype",
+      "group_title": "3 · The file opens, but it is not an invoice",
+      "title": "Invoice in another language",
+      "expected": "Passes the gate; extraction proceeds.",
+      "status": "handled",
+      "seconds": 7.0,
+      "ran_at": "2026-09-10T21:48:09+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "non-english-de.pdf",
+          "uploaded_as": "non-english-de.pdf",
+          "http_status": 200,
+          "route": "HOLD_REVIEW",
+          "codes": [
+            "NO_PO_MATCH",
+            "MISSING_FIELD"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "non-english-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "German invoice against the EUR order PO-2001"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "garbled",
+      "group": "text-layer",
+      "group_title": "4 · The text layer is present but unusable",
+      "title": "Garbled text layer (symbol soup, “(cid:…)” runs, broken font encoding)",
+      "expected": "The page is treated as scanned: no text blocks, the image is read instead. Recorded as garbled_pages on the run.",
+      "status": "handled",
+      "seconds": 13.2,
+      "ran_at": "2026-09-10T21:48:23+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "garbled-text-layer.pdf",
+          "uploaded_as": "garbled-text-layer.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "not an invoice",
+          "doc_type_reason": "The page was read twice and reads as not an invoice.",
+          "model_calls": 2,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "garbled-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "page kinds ['scanned'], garbled pages [1], 0 text blocks handed to the model"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "sparse-text",
+      "group": "text-layer",
+      "group_title": "4 · The text layer is present but unusable",
+      "title": "Image page with a few characters of text (a stamp, a page number)",
+      "expected": "Treated as a scanned page and read from the image.",
+      "status": "handled",
+      "seconds": 14.0,
+      "ran_at": "2026-09-10T21:48:37+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "scanned-invoice.pdf",
+          "uploaded_as": "scanned-invoice.pdf",
+          "http_status": 200,
+          "route": "AUTO_APPROVE",
+          "codes": [],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "no text layer",
+          "doc_type_reason": "Image-only pages: the type is decided from what the vision reading finds.",
+          "model_calls": 2,
+          "posted": true,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "sparse-text-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "read from the page image: 12 fields, 9 confirmed by code (second reading agreed or a hard cross-check held)"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "hidden-text",
+      "group": "text-layer",
+      "group_title": "4 · The text layer is present but unusable",
+      "title": "Hidden or white text, instructions to the model inside the PDF",
+      "expected": "Injected text cannot create a value that is not on the page, and cannot approve anything.",
+      "status": "limitation",
+      "seconds": 6.9,
+      "ran_at": "2026-09-10T21:48:44+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "prompt-injection.pdf",
+          "uploaded_as": "prompt-injection.pdf",
+          "http_status": 200,
+          "route": "AUTO_APPROVE",
+          "codes": [],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": true,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "hidden-text-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "total the run used: 'Total: $6,495.00'; amount posted to the ledger: 649500 minor units"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "first-scan-only",
+      "group": "text-layer",
+      "group_title": "4 · The text layer is present but unusable",
+      "title": "Mixed document where the invoice is on a later image-only page",
+      "expected": "Fields on later scanned pages are missed; the run holds for review.",
+      "status": "limitation",
+      "seconds": 13.8,
+      "ran_at": "2026-09-10T21:48:57+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "invoice-on-later-scanned-page.pdf",
+          "uploaded_as": "invoice-on-later-scanned-page.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "UNSUPPORTED_DOCUMENT_TYPE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "not an invoice",
+          "doc_type_reason": "The page was read twice and reads as not an invoice.",
+          "model_calls": 2,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "first-scan-only-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "page 1 text cover, page 2 image, page 3 the image-only invoice; only the first image page is read. Amount posted: 0"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "budget",
+      "group": "extraction",
+      "group_title": "5 · It is an invoice, but the reading fails or is incomplete",
+      "title": "Model unavailable, times out or returns unparseable output",
+      "expected": "Budget exhausted: held with no fields, shown as “We couldn’t finish reading this invoice”.",
+      "status": "handled",
+      "seconds": 5.0,
+      "ran_at": "2026-09-10T21:49:02+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "budget-exhausted.pdf",
+          "uploaded_as": "budget-exhausted.pdf",
+          "http_status": 200,
+          "route": "HOLD_REVIEW",
+          "codes": [
+            "VENDOR_UNKNOWN",
+            "NO_PO_MATCH",
+            "MISSING_FIELD"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "budget-1.json",
+          "reader_errors": [
+            "extract: ConnectionError",
+            "extract: ConnectionError",
+            "extract: ConnectionError"
+          ],
+          "api_errors": [
+            "BudgetExceeded: attempts exhausted: model endpoint unreachable (probe)"
+          ],
+          "note": "3 outbound attempts, all failed; budget_exhausted recorded: True; amount posted: 0. No review form is offered for a run with no reading."
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "value-not-in-source",
+      "group": "extraction",
+      "group_title": "5 · It is an invoice, but the reading fails or is incomplete",
+      "title": "Model returns a value that is not in the block it cites",
+      "expected": "The field fails source_match and does not count as verified; the invoice holds.",
+      "status": "handled",
+      "seconds": 7.1,
+      "ran_at": "2026-09-10T21:49:09+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "injected-fake-value.pdf",
+          "uploaded_as": "injected-fake-value.pdf",
+          "http_status": 200,
+          "route": "AUTO_APPROVE",
+          "codes": [],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": true,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "value-not-in-source-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "subtotal the model returned: '$6,000.00', source_match 'pass'; amount posted: 649500 minor units"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "missing-fields",
+      "group": "extraction",
+      "group_title": "5 · It is an invoice, but the reading fails or is incomplete",
+      "title": "Required field missing or ambiguous on a genuine invoice",
+      "expected": "Held with MISSING_FIELD; only the affected fields are asked for.",
+      "status": "handled",
+      "seconds": 7.3,
+      "ran_at": "2026-09-10T21:49:17+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "unknown-supplier.pdf",
+          "uploaded_as": "unknown-supplier.pdf",
+          "http_status": 200,
+          "route": "HOLD_REVIEW",
+          "codes": [
+            "VENDOR_UNKNOWN",
+            "NO_PO_MATCH"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "missing-fields-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": null
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "ambiguous-values",
+      "group": "extraction",
+      "group_title": "5 · It is an invoice, but the reading fails or is incomplete",
+      "title": "Ambiguous date (03.04.2021), separator (1.234), currency symbol ($)",
+      "expected": "Held; the reviewer is shown each legal reading and picks one.",
+      "status": "handled",
+      "seconds": 7.0,
+      "ran_at": "2026-09-10T21:49:24+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "ambiguous-date-and-currency.pdf",
+          "uploaded_as": "ambiguous-date-and-currency.pdf",
+          "http_status": 200,
+          "route": "HOLD_REVIEW",
+          "codes": [
+            "MISSING_FIELD",
+            "AMBIGUOUS_CURRENCY",
+            "AMBIGUOUS_DATE"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "ambiguous-values-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "date 03.04.2021 reads as 3 April or 4 March, and “$” alone names no currency; readings the code refused to use: {'invoice_date': '03.04.2021', 'currency': '$6,000.00'}; amount posted: 0"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "math",
+      "group": "extraction",
+      "group_title": "5 · It is an invoice, but the reading fails or is incomplete",
+      "title": "Amounts that do not add up, prepayment or prior-balance structures",
+      "expected": "Held with MATH_MISMATCH or UNSUPPORTED_AMOUNT_STRUCTURE.",
+      "status": "handled",
+      "seconds": 7.2,
+      "ran_at": "2026-09-10T21:49:31+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "math-mismatch.pdf",
+          "uploaded_as": "math-mismatch.pdf",
+          "http_status": 200,
+          "route": "HOLD_REVIEW",
+          "codes": [
+            "MATH_MISMATCH"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "math-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "6,000.00 + 495.00 ≠ 7,000.00"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "same-bytes",
+      "group": "identity",
+      "group_title": "6 · Duplicates and identity",
+      "title": "Same file uploaded again (any file name)",
+      "expected": "Rejected as DUP_FILE_HASH with a link to the earlier result. Applies to junk files too.",
+      "status": "handled",
+      "seconds": 7.2,
+      "ran_at": "2026-09-10T21:49:38+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "duplicate-file.pdf",
+          "uploaded_as": "duplicate-file.pdf",
+          "http_status": 200,
+          "route": "AUTO_APPROVE",
+          "codes": [],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": true,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "same-bytes-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "first submission"
+        },
+        {
+          "fixture": "duplicate-file.pdf",
+          "uploaded_as": "renamed-copy.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "DUP_FILE_HASH"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": null,
+          "doc_type_reason": null,
+          "model_calls": 0,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "same-bytes-2.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "same bytes under a new file name; total posted across both: 649500 minor units"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "same-invoice",
+      "group": "identity",
+      "group_title": "6 · Duplicates and identity",
+      "title": "Same supplier + invoice number already approved",
+      "expected": "Rejected as DUP_INVOICE_NO; nothing posted.",
+      "status": "handled",
+      "seconds": 14.5,
+      "ran_at": "2026-09-10T21:49:53+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "same-invoice-a.pdf",
+          "uploaded_as": "same-invoice-a.pdf",
+          "http_status": 200,
+          "route": "AUTO_APPROVE",
+          "codes": [],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": true,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "same-invoice-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "approved and posted"
+        },
+        {
+          "fixture": "same-invoice-b.pdf",
+          "uploaded_as": "same-invoice-b.pdf",
+          "http_status": 200,
+          "route": "REJECT",
+          "codes": [
+            "DUP_INVOICE_NO"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "same-invoice-2.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "same supplier and invoice number, different file; total posted: 649500 minor units"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "fingerprint",
+      "group": "identity",
+      "group_title": "6 · Duplicates and identity",
+      "title": "Same supplier, amount and date under a different number",
+      "expected": "Held as a possible duplicate.",
+      "status": "handled",
+      "seconds": 15.5,
+      "ran_at": "2026-09-10T21:50:08+00:00",
+      "verdict": "confirmed",
+      "observations": [
+        {
+          "fixture": "fingerprint-a.pdf",
+          "uploaded_as": "fingerprint-a.pdf",
+          "http_status": 200,
+          "route": "AUTO_APPROVE",
+          "codes": [],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": true,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "fingerprint-1.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "IT-1, $1,000.00 on 2026-08-28"
+        },
+        {
+          "fixture": "fingerprint-b.pdf",
+          "uploaded_as": "fingerprint-b.pdf",
+          "http_status": 200,
+          "route": "HOLD_REVIEW",
+          "codes": [
+            "DUP_FINGERPRINT"
+          ],
+          "run_status": "completed",
+          "failure_reason": null,
+          "doc_type": "invoice",
+          "doc_type_reason": "Invoice wording and monetary amounts are present.",
+          "model_calls": 1,
+          "posted": false,
+          "error": null,
+          "fixture_kept": true,
+          "result_file": "fingerprint-2.json",
+          "reader_errors": [],
+          "api_errors": [],
+          "note": "IT-2, same supplier, amount and date; total posted: 100000 minor units"
+        }
+      ],
+      "note": ""
+    }
+  ]
+}

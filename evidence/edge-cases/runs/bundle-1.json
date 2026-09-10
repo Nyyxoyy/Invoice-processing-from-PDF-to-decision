@@ -1,0 +1,140 @@
+{
+  "case": "bundle",
+  "fixture": "bundle.pdf",
+  "uploaded_as": "bundle.pdf",
+  "http_status": 200,
+  "model_calls": 0,
+  "observed": "HTTP 200 · REJECT [UNSUPPORTED_DOCUMENT_TYPE] · type “several invoices in one file” · 0 model calls · nothing posted",
+  "api_response": {
+    "run_id": "run_06b0d7ff35cb",
+    "invoice_id": null,
+    "route": "REJECT",
+    "codes": [
+      "UNSUPPORTED_DOCUMENT_TYPE"
+    ],
+    "explanation": "Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.",
+    "posted": false
+  },
+  "run": {
+    "run_id": "run_06b0d7ff35cb",
+    "document_id": "doc_25847038a554",
+    "invoice_id": null,
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "rejected",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:47:42",
+    "finished_at": "2026-09-10 21:47:42",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "bundle.pdf",
+    "confidence": {
+      "score": null,
+      "band": "unavailable",
+      "reasons": [
+        "No completed extraction available."
+      ]
+    },
+    "snapshot": {
+      "codes": [
+        "UNSUPPORTED_DOCUMENT_TYPE"
+      ]
+    }
+  },
+  "fields": null,
+  "diagnosis": null,
+  "context": null,
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "INGEST",
+      "event_type": "classified",
+      "payload": {
+        "pages": 2,
+        "page_kinds": [
+          "text",
+          "text"
+        ],
+        "garbled_pages": [],
+        "extraction_revision_id": "xr_8d90180ef8cb",
+        "blocks": 12
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "bundle",
+        "invoice_like": false,
+        "label": "several invoices in one file",
+        "reasons": [
+          "2 different invoice numbers were found on different pages: NW-1, NW-2.",
+          "Each invoice is decided on its own. Split the file and upload one invoice at a time."
+        ],
+        "signals": {
+          "invoice_words": 2,
+          "total_words": 2,
+          "tax_words": 2,
+          "billing_words": 0,
+          "amounts": 6,
+          "amounts_any": 6,
+          "monetary": {
+            "decimal": 6,
+            "currency_adjacent": 6,
+            "grouped_integer": 0
+          },
+          "currency_marks": 7,
+          "dates": 0,
+          "invoice_numbers": [
+            "NW-1",
+            "NW-2"
+          ],
+          "chars": 207,
+          "bundle_numbers": [
+            "NW-1",
+            "NW-2"
+          ],
+          "blank_pages": [],
+          "page_kinds": [
+            "text",
+            "text"
+          ]
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "REJECT",
+        "codes": [
+          "UNSUPPORTED_DOCUMENT_TYPE"
+        ],
+        "explanation": "Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.",
+        "posted": false
+      }
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": null,
+        "band": "unavailable",
+        "reasons": [
+          "No completed extraction available."
+        ]
+      }
+    }
+  ]
+}

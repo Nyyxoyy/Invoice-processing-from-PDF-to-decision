@@ -1,0 +1,118 @@
+{
+  "case": "blank",
+  "fixture": "blank.pdf",
+  "uploaded_as": "blank.pdf",
+  "http_status": 200,
+  "model_calls": 0,
+  "observed": "HTTP 200 · REJECT [UNSUPPORTED_DOCUMENT_TYPE] · type “blank document” · 0 model calls · nothing posted",
+  "api_response": {
+    "run_id": "run_6871a41878f3",
+    "invoice_id": null,
+    "route": "REJECT",
+    "codes": [
+      "UNSUPPORTED_DOCUMENT_TYPE"
+    ],
+    "explanation": "Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.",
+    "posted": false
+  },
+  "run": {
+    "run_id": "run_6871a41878f3",
+    "document_id": "doc_8a77f1527ab0",
+    "invoice_id": null,
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "rejected",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:47:42",
+    "finished_at": "2026-09-10 21:47:42",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "blank.pdf",
+    "confidence": {
+      "score": null,
+      "band": "unavailable",
+      "reasons": [
+        "No completed extraction available."
+      ]
+    },
+    "snapshot": {
+      "codes": [
+        "UNSUPPORTED_DOCUMENT_TYPE"
+      ]
+    }
+  },
+  "fields": null,
+  "diagnosis": null,
+  "context": null,
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "INGEST",
+      "event_type": "classified",
+      "payload": {
+        "pages": 2,
+        "page_kinds": [
+          "scanned",
+          "scanned"
+        ],
+        "garbled_pages": [],
+        "extraction_revision_id": "xr_9521f29d46d5",
+        "blocks": 0
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "blank",
+        "invoice_like": false,
+        "label": "blank document",
+        "reasons": [
+          "All 2 page(s) are empty: no text, no images, no drawings.",
+          "There is nothing to read. Check the export or scan and upload the invoice itself."
+        ],
+        "signals": {
+          "blank_pages": [
+            1,
+            2
+          ],
+          "pages": 2
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "REJECT",
+        "codes": [
+          "UNSUPPORTED_DOCUMENT_TYPE"
+        ],
+        "explanation": "Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.",
+        "posted": false
+      }
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": null,
+        "band": "unavailable",
+        "reasons": [
+          "No completed extraction available."
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,785 @@
+{
+  "case": "math",
+  "fixture": "math-mismatch.pdf",
+  "uploaded_as": "math-mismatch.pdf",
+  "http_status": 200,
+  "model_calls": 1,
+  "observed": "HTTP 200 · HOLD_REVIEW [MATH_MISMATCH] · type “invoice” · 1 model call · nothing posted",
+  "api_response": {
+    "run_id": "run_4114d489ee33",
+    "invoice_id": "inv_4e3aecaa8c0d",
+    "route": "HOLD_REVIEW",
+    "codes": [
+      "MATH_MISMATCH"
+    ],
+    "explanation": "Held for review (MATH_MISMATCH). Cumulative billing USD 7,000.00 against a USD 10,000.00 PO; overage USD 0.00, allowance USD 200.00 (exception limit USD 500.00). No amount was added to the approved ledger. Next: a reviewer resolves the listed reasons, or the PO/policy is amended.",
+    "posted": false
+  },
+  "run": {
+    "run_id": "run_4114d489ee33",
+    "document_id": "doc_76d81b3191de",
+    "invoice_id": "inv_4e3aecaa8c0d",
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "held",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:49:24",
+    "finished_at": "2026-09-10 21:49:31",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "math-mismatch.pdf",
+    "confidence": {
+      "score": 69,
+      "band": "low",
+      "reasons": [
+        "6/6 required fields verified",
+        "Supplier matched",
+        "Purchase order matched",
+        "Totals need review"
+      ],
+      "supplier_match": true,
+      "po_match": true,
+      "method": "evidence-v1",
+      "scored_at": "2026-09-10 21:49:31"
+    },
+    "snapshot": {
+      "policy_version": 1,
+      "registry_version": "bundled-2026-09-09",
+      "rounding_policy": {
+        "quantize_mode": "ROUND_HALF_UP",
+        "per_line_bound_minor": 1,
+        "reconciliation_local_bound_minor": 1,
+        "document_residual_cap_minor": 5
+      },
+      "currency": "USD",
+      "consumed_A_minor": 0,
+      "budget": {
+        "base_minor": 1000000,
+        "consumed_minor": 0,
+        "invoice_minor": 700000,
+        "cumulative_minor": 700000,
+        "overage_minor": 0,
+        "t_primary_minor": 20000,
+        "t_exception_minor": 50000,
+        "currency": "USD"
+      },
+      "codes": [
+        "MATH_MISMATCH"
+      ]
+    }
+  },
+  "fields": {
+    "supplier_name": {
+      "field": "supplier_name",
+      "status": "selected",
+      "raw_value": "Northwind Supplies LLC",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b0"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "buyer_name": {
+      "field": "buyer_name",
+      "status": "selected",
+      "raw_value": "Acme Corporation",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b4"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "invoice_number": {
+      "field": "invoice_number",
+      "status": "selected",
+      "raw_value": "NW-BM-1",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b1"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "invoice_date": {
+      "field": "invoice_date",
+      "status": "selected",
+      "raw_value": "2026-08-28",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b2"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "due_date": {
+      "field": "due_date",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "currency": {
+      "field": "currency",
+      "status": "selected",
+      "raw_value": "USD",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b5"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "po_reference": {
+      "field": "po_reference",
+      "status": "selected",
+      "raw_value": "PO-1001",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b3"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "subtotal_net": {
+      "field": "subtotal_net",
+      "status": "selected",
+      "raw_value": "$6,000.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b6"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": {
+        "why": "Amounts do not add up: 6000.00 + 495.00 != 7000.00.",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "expected": "a number, e.g. 2553.91",
+        "suggestion": "6000.00",
+        "unusable": null,
+        "suggestions": [
+          {
+            "value": "6000.00",
+            "reason": "as read on the document"
+          }
+        ]
+      },
+      "attestable": false
+    },
+    "tax_total": {
+      "field": "tax_total",
+      "status": "selected",
+      "raw_value": "$495.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b7"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": {
+        "why": "Amounts do not add up: 6000.00 + 495.00 != 7000.00.",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "expected": "a number, e.g. 255.39",
+        "suggestion": "495.00",
+        "unusable": null,
+        "suggestions": [
+          {
+            "value": "495.00",
+            "reason": "as read on the document"
+          }
+        ]
+      },
+      "attestable": false
+    },
+    "shipping_total": {
+      "field": "shipping_total",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": {
+        "why": "Amounts do not add up: 6000.00 + 495.00 != 7000.00.",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "expected": "a number, e.g. 50.00",
+        "suggestion": null,
+        "unusable": null,
+        "suggestions": []
+      },
+      "attestable": false
+    },
+    "invoice_gross_total": {
+      "field": "invoice_gross_total",
+      "status": "selected",
+      "raw_value": "$7,000.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": "p1.b8"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": {
+        "why": "Amounts do not add up: 6000.00 + 495.00 != 7000.00.",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "expected": "a number, e.g. 2809.30",
+        "suggestion": "7000.00",
+        "unusable": null,
+        "suggestions": [
+          {
+            "value": "7000.00",
+            "reason": "as read on the document"
+          }
+        ]
+      },
+      "attestable": false
+    },
+    "amount_due": {
+      "field": "amount_due",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    }
+  },
+  "diagnosis": {
+    "codes": [
+      "MATH_MISMATCH"
+    ],
+    "open_codes": [
+      "MATH_MISMATCH"
+    ],
+    "items": [
+      {
+        "code": "MATH_MISMATCH",
+        "label": "Amounts on the document do not add up",
+        "action": "Check subtotal, tax, shipping and total against the page (6000.00 + 495.00 != 7000.00) and correct the wrong one.",
+        "target": {
+          "kind": "field",
+          "field": "invoice_gross_total"
+        },
+        "fields": [
+          "subtotal_net",
+          "tax_total",
+          "shipping_total",
+          "invoice_gross_total"
+        ],
+        "status": "open"
+      }
+    ],
+    "field_problems": {
+      "subtotal_net": {
+        "why": "Amounts do not add up: 6000.00 + 495.00 != 7000.00.",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "expected": "a number, e.g. 2553.91",
+        "suggestion": "6000.00",
+        "unusable": null,
+        "suggestions": [
+          {
+            "value": "6000.00",
+            "reason": "as read on the document"
+          }
+        ]
+      },
+      "tax_total": {
+        "why": "Amounts do not add up: 6000.00 + 495.00 != 7000.00.",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "expected": "a number, e.g. 255.39",
+        "suggestion": "495.00",
+        "unusable": null,
+        "suggestions": [
+          {
+            "value": "495.00",
+            "reason": "as read on the document"
+          }
+        ]
+      },
+      "shipping_total": {
+        "why": "Amounts do not add up: 6000.00 + 495.00 != 7000.00.",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "expected": "a number, e.g. 50.00",
+        "suggestion": null,
+        "unusable": null,
+        "suggestions": []
+      },
+      "invoice_gross_total": {
+        "why": "Amounts do not add up: 6000.00 + 495.00 != 7000.00.",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "expected": "a number, e.g. 2809.30",
+        "suggestion": "7000.00",
+        "unusable": null,
+        "suggestions": [
+          {
+            "value": "7000.00",
+            "reason": "as read on the document"
+          }
+        ]
+      }
+    },
+    "vendor_resolved": true
+  },
+  "context": {
+    "any_scanned": false,
+    "currency": {
+      "code": "USD",
+      "source": "field"
+    },
+    "po_references": [
+      "PO-1001"
+    ]
+  },
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:49:24",
+      "stage": "INGEST",
+      "event_type": "classified",
+      "payload": {
+        "pages": 1,
+        "page_kinds": [
+          "text"
+        ],
+        "garbled_pages": [],
+        "extraction_revision_id": "xr_6adb1423bdd9",
+        "blocks": 9
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:49:24",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "invoice",
+        "invoice_like": true,
+        "label": "invoice",
+        "reasons": [
+          "Invoice wording and monetary amounts are present."
+        ],
+        "signals": {
+          "invoice_words": 2,
+          "total_words": 1,
+          "tax_words": 1,
+          "billing_words": 1,
+          "amounts": 3,
+          "amounts_any": 3,
+          "monetary": {
+            "decimal": 3,
+            "currency_adjacent": 3,
+            "grouped_integer": 0
+          },
+          "currency_marks": 4,
+          "dates": 1,
+          "invoice_numbers": [
+            "NW-BM-1"
+          ],
+          "chars": 185,
+          "blank_pages": [],
+          "page_kinds": [
+            "text"
+          ]
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:49:31",
+      "stage": "EXTRACT",
+      "event_type": "attempts",
+      "payload": {
+        "attempts": [
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": true,
+            "seconds": 2.15,
+            "input_tokens": 305,
+            "output_tokens": 635
+          }
+        ]
+      }
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-10 21:49:31",
+      "stage": "EXTRACT",
+      "event_type": "fields",
+      "payload": {
+        "supplier_name": {
+          "status": "selected",
+          "raw": "Northwind Supplies LLC",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b0"
+          }
+        },
+        "buyer_name": {
+          "status": "selected",
+          "raw": "Acme Corporation",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b4"
+          }
+        },
+        "invoice_number": {
+          "status": "selected",
+          "raw": "NW-BM-1",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b1"
+          }
+        },
+        "invoice_date": {
+          "status": "selected",
+          "raw": "2026-08-28",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b2"
+          }
+        },
+        "due_date": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": null
+          }
+        },
+        "currency": {
+          "status": "selected",
+          "raw": "USD",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b5"
+          }
+        },
+        "po_reference": {
+          "status": "selected",
+          "raw": "PO-1001",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b3"
+          }
+        },
+        "subtotal_net": {
+          "status": "selected",
+          "raw": "$6,000.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b6"
+          }
+        },
+        "tax_total": {
+          "status": "selected",
+          "raw": "$495.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b7"
+          }
+        },
+        "shipping_total": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": null
+          }
+        },
+        "invoice_gross_total": {
+          "status": "selected",
+          "raw": "$7,000.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b8"
+          }
+        },
+        "amount_due": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "ts": "2026-09-10 21:49:31",
+      "stage": "VALIDATE",
+      "event_type": "gates",
+      "payload": {
+        "required_fields_ok": true,
+        "arithmetic_ok": false,
+        "reconciliation": "6000.00 + 495.00 != 7000.00",
+        "structure_supported": true,
+        "scan_gate": false,
+        "ambiguous_date": false,
+        "currency": {
+          "code": "USD",
+          "source": "field",
+          "evidence": {
+            "extraction_revision_id": "xr_6adb1423bdd9",
+            "block_id": "p1.b5"
+          }
+        },
+        "po_references": [
+          "PO-1001"
+        ]
+      }
+    },
+    {
+      "seq": 6,
+      "ts": "2026-09-10 21:49:31",
+      "stage": "MATCH",
+      "event_type": "rule_evaluated",
+      "payload": {
+        "rule": "budget_check[v1]",
+        "A": 0,
+        "I": 700000,
+        "C": 700000,
+        "B": 1000000,
+        "D": 0,
+        "T_primary": 20000,
+        "T_exception": 50000
+      }
+    },
+    {
+      "seq": 7,
+      "ts": "2026-09-10 21:49:31",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "HOLD_REVIEW",
+        "codes": [
+          "MATH_MISMATCH"
+        ],
+        "explanation": "Held for review (MATH_MISMATCH). Cumulative billing USD 7,000.00 against a USD 10,000.00 PO; overage USD 0.00, allowance USD 200.00 (exception limit USD 500.00). No amount was added to the approved ledger. Next: a reviewer resolves the listed reasons, or the PO/policy is amended.",
+        "posted": false
+      }
+    },
+    {
+      "seq": 8,
+      "ts": "2026-09-10 21:49:31",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": 69,
+        "band": "low",
+        "reasons": [
+          "6/6 required fields verified",
+          "Supplier matched",
+          "Purchase order matched",
+          "Totals need review"
+        ],
+        "supplier_match": true,
+        "po_match": true,
+        "method": "evidence-v1",
+        "scored_at": "2026-09-10 21:49:31"
+      }
+    }
+  ]
+}

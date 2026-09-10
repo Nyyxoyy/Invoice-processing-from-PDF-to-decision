@@ -4,8 +4,32 @@
     {
       "name": "ap-api",
       "runtimeExecutable": "/Users/nikunj/zamp-case-study/venv/bin/python",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8321", "--app-dir", "/Users/nikunj/zamp-case-study/backend"],
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--port",
+        "8321",
+        "--app-dir",
+        "/Users/nikunj/zamp-case-study/backend"
+      ],
       "port": 8321
+    },
+    {
+      "name": "ap-api-intake",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATA_DIR=/private/tmp/claude-501/-Users-nikunj-zamp-case-study/c5e58829-3aa7-4f38-998e-62903e29265c/scratchpad/data",
+        "/Users/nikunj/zamp-case-study/venv/bin/python",
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--port",
+        "8341",
+        "--app-dir",
+        "/Users/nikunj/zamp-case-study/backend"
+      ],
+      "port": 8341
     }
   ]
 }

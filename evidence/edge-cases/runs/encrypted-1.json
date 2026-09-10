@@ -1,0 +1,54 @@
+{
+  "case": "encrypted",
+  "fixture": "encrypted.pdf",
+  "uploaded_as": "encrypted.pdf",
+  "http_status": 422,
+  "model_calls": 0,
+  "observed": "HTTP 422 · run failed · reason “encrypted: password required” · 0 model calls · error the PDF is password-protected",
+  "api_response": {
+    "detail": {
+      "run_id": "run_bef76195f7cc",
+      "run_status": "failed",
+      "error": "the PDF is password-protected"
+    }
+  },
+  "run": {
+    "run_id": "run_bef76195f7cc",
+    "document_id": "doc_1241fca39095",
+    "invoice_id": null,
+    "run_status": "failed",
+    "failure_reason": "encrypted: password required",
+    "disposition": null,
+    "decision_mode": null,
+    "policy_version": null,
+    "created_at": "2026-09-10 21:47:21",
+    "finished_at": "2026-09-10 21:47:21",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "encrypted.pdf",
+    "confidence": {
+      "score": null,
+      "band": "unavailable",
+      "reasons": [
+        "No completed extraction available."
+      ]
+    },
+    "snapshot": null
+  },
+  "fields": null,
+  "diagnosis": null,
+  "context": null,
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:47:21",
+      "stage": "INGEST",
+      "event_type": "operational_failure",
+      "payload": {
+        "reason": "encrypted: password required"
+      }
+    }
+  ]
+}

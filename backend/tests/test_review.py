@@ -156,6 +156,7 @@ def test_delete_run_guards_and_orphans(env):
     # simulate endpoint logic inline (no server): call the handler pieces
     posted = conn.execute("SELECT 1 FROM ledger_events WHERE run_id=? AND kind='posting'", (held.run_id,)).fetchone()
     assert posted is None
+    conn.execute("DELETE FROM tickets WHERE run_id=?", (held.run_id,))
     conn.execute("DELETE FROM field_revisions WHERE run_id=?", (held.run_id,))
     conn.execute("DELETE FROM run_events WHERE run_id=?", (held.run_id,))
     conn.execute("DELETE FROM runs WHERE run_id=?", (held.run_id,))

@@ -109,6 +109,7 @@ const state = {
   page: 1,
   selectedField: null,
   live: null,
+  batch: null,
   busy: false,
   decisionKeys: {},
   user: null,
@@ -117,13 +118,28 @@ const state = {
   requestFilter: "open",
   requestSearch: "",
 };
-const TOKEN_KEY = "access_code";
+// Open demo: no passwords. The "token" is the role itself (reviewer by
+// default); the server still enforces what each role may do.
+const TOKEN_KEY = "role";
+const DEFAULT_ROLE = "reviewer";
+let onboardingComplete = false;
+try { onboardingComplete = localStorage.getItem("invoice-desk:onboarded") === "yes"; } catch(e) {}
+function completeOnboarding() {
+  onboardingComplete = true;
+  try { localStorage.setItem("invoice-desk:onboarded", "yes"); } catch(e) {}
+}
+
 const getToken = () => {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(TOKEN_KEY) || DEFAULT_ROLE;
   } catch (e) {
-    return null;
+    return DEFAULT_ROLE;
   }
+};
+const setToken = (role) => {
+  try {
+    localStorage.setItem(TOKEN_KEY, role);
+  } catch (e) {}
 };
 const isAdmin = () => state.user?.role === "admin";
 function applyRoleUI() {
@@ -135,6 +151,9 @@ function applyRoleUI() {
   badge.textContent = signedIn ? state.user.label : "";
   badge.className = `role-badge ${state.user?.role || ""}`;
   $("#switch-role").hidden = !signedIn;
+  $("#switch-role").textContent = isAdmin()
+    ? "Switch to invoice review"
+    : "Switch to procurement";
   $("#nav-count").hidden = isAdmin() || !signedIn;
   document
     .querySelectorAll(".admin-only")
@@ -148,27 +167,32 @@ function applyRoleUI() {
   $("#invoice-nav-label").textContent = isAdmin()
     ? "Invoice history"
     : "Invoice reviews";
-  $(".brand").href = isAdmin() ? "#queue" : "#invoices";
+  $(".brand").href = isAdmin() ? "#queue" : "#dashboard";
   // admin order: Invoice history, Purchase orders, Suppliers, Requests (last)
   if (isAdmin()) $("nav").append(document.querySelector('[data-nav="queue"]'));
 }
 function signOut() {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-  } catch (e) {}
   state.user = null;
   state.live = null;
+  state.batch = null;
   applyRoleUI();
 }
 async function ensureSession() {
-  if (!getToken()) return null;
   try {
     state.user = await api("/api/auth/me");
   } catch (e) {
     state.user = null;
+    state.sessionError = e.message;
   }
   applyRoleUI();
   return state.user;
+}
+async function switchRole(role) {
+  setToken(role);
+  signOut();
+  await ensureSession();
+  location.hash = "";
+  await route();
 }
 const TICKET_KINDS = {
   unblock_supplier: "Approve a blocked supplier again",
@@ -332,13 +356,13 @@ async function api(path, options = {}) {
     });
     checkAppVersion(response.headers.get("X-App-Version"));
     const data = await response.json().catch(() => null);
-    if (response.status === 401 && !path.startsWith("/api/auth/login")) {
-      signOut();
-      renderLanding();
-      throw new ApiError(
-        "Your session ended. Sign in again with your access code.",
-        401,
-      );
+    if (response.status === 401) {
+      // a stale stored role (or none): fall back to the reviewer workspace
+      if (getToken() !== DEFAULT_ROLE) {
+        setToken(DEFAULT_ROLE);
+        switchRole(DEFAULT_ROLE);
+      }
+      throw new ApiError("The role could not be resolved. Reloading as invoice reviewer.", 401);
     }
     if (!response.ok) {
       const detail = data?.detail;
@@ -448,28 +472,51 @@ function applyTheme(theme, persist = true) {
   if (meta) meta.content = theme === "dark" ? "#0f151c" : "#f7f8fa";
 }
 async function renderLanding() {
+  // No sign-in screen: the reviewer workspace opens directly. This is only
+  // reached when the server could not tell us who we are.
   state.route = "landing";
+  document.body.classList.remove("welcome-screen");
+  document.documentElement.classList.remove("onboarding-shell");
   applyRoleUI();
   $("#breadcrumb").textContent = "Invoice desk";
-  let cfg = state.authConfig;
-  if (!cfg) {
-    try {
-      cfg = state.authConfig = await api("/api/auth/config");
-    } catch (e) {
-      $("#main").innerHTML = errorHTML(e.message);
+  $("#main").innerHTML =
+    `<div class="landing"><div class="eyebrow">INVOICE DESK</div><h1>Couldn’t open the workspace</h1><p>${esc(state.sessionError || "The server did not respond.")}</p>${errorHTML("Check that the server is running, then try again.", "retry-session", "Try again")}</div>`;
+}
+function welcomePage() {
+  $('#main').innerHTML = `<div class="onboarding">
+    <div class="welcome-nav"><a class="welcome-brand" href="#home"><span class="brand-mark">i</span>Invoice desk</a></div>
+    <header class="welcome-intro"><span class="welcome-kicker">YOUR AI INVOICE WORKSPACE</span><h1>Start with an invoice.<br><span>Leave the busywork to AI.</span></h1><p>AI reads the details, checks the supplier and purchase order, and shows you what needs attention. Choose how you’d like to begin.</p></header>
+    <section class="entry-choices" aria-label="Choose your invoice source">
+      <article class="entry-card dataset-choice"><div class="entry-card-top"><span class="entry-icon" aria-hidden="true">▤</span><span class="entry-tag">A good place to start</span></div><h2>Upload from dataset</h2><p>Choose the complete invoice collection or select individual documents for processing.</p><div class="entry-meta"><span>Existing PDF library</span><span>No files needed</span></div><a class="button-link primary entry-cta" href="#dataset">Browse documents <span aria-hidden="true">→</span></a></article>
+      <article class="entry-card own-choice" id="drop-zone" aria-label="Drop your invoice PDFs here"><div class="entry-card-top"><span class="entry-icon" aria-hidden="true">↥</span><span class="entry-tag">Bring your own invoices</span></div><h2>Upload your own</h2><p>Choose an invoice from your computer, or drop files here. AI fills in the details and runs the same checks automatically.</p><div class="entry-meta"><span>PDF or ZIP of PDFs</span><span>Single invoice or batch</span></div><button class="entry-cta" data-action="upload">Choose your files <span aria-hidden="true">↑</span></button><small>PDFs up to 10 MB / 10 pages each · up to 25 per batch</small></article>
+    </section><div id="upload-error" role="alert"></div>
+    <section class="welcome-process" aria-labelledby="next-heading"><div class="process-heading"><h2 id="next-heading">You upload. Here’s what happens next.</h2><span>One flow, whichever option you choose</span></div><ol><li><span class="step-number">01</span><div><h3>AI reads & fills</h3><p>Invoice details are extracted from the PDF. No form to fill out.</p></div></li><li><span class="step-number">02</span><div><h3>Matches & checks</h3><p>Supplier, PO and totals are checked. Missing records trigger a procurement request.</p></div></li><li><span class="step-number">03</span><div><h3>You see the result</h3><p>Get a confidence band and clear status. Eligible invoices are approved automatically.</p></div></li></ol></section>
+    <footer class="welcome-footer"><span>Review exceptions. Follow every invoice in the dashboard.</span><span>Demo workspace · No payments are sent</span></footer></div>`;
+}
+async function datasetPage(generation) {
+  $('#main').innerHTML = `<div class="dataset-page"><div class="welcome-nav dataset-nav"><a class="welcome-brand" href="#home"><span class="brand-mark">i</span>Invoice desk</a></div><a class="back-link" href="#home">← Choose another way to start</a>${header('Select documents to process.', 'Upload the complete collection or choose individual PDFs below.')}<div id="dataset-content" aria-live="polite"><div class="skeleton" role="status">Loading documents…</div></div></div>`;
+  try {
+    const [library, runs] = await Promise.all([api('/api/samples'), api('/api/runs').catch(() => [])]);
+    if (generation !== state.generation) return;
+    const bundle = library.find(s => s.onboarding && s.recommended && isZipName(s.name));
+    const samples = library.filter(s => bundle?.members?.includes(s.name) && isPdfName(s.name));
+    state.samples = library;
+    const parents = new Set(runs.map(r => r.parent_run_id).filter(Boolean));
+    const latest = runs.filter(r => !parents.has(r.run_id));
+    const priorFor = sample => latest.find(r => r.filename === sample.name && r.run_status === 'completed');
+    if (!bundle || !samples.length) {
+      $('#dataset-content').innerHTML = errorHTML('The document collection is unavailable. Retry, or return to upload your own invoice.', 'reload', 'Retry collection');
       return;
     }
+    $('#dataset-content').innerHTML = `<section class="starter-kit"><div class="kit-main"><span class="entry-tag kit-tag">RECOMMENDED</span><h2>Invoice collection</h2><p>${samples.length} PDF documents in one ZIP archive.</p><p class="kit-description">Submit the collection together. Each document is processed separately, with its details and status available in your workspace.</p></div><div class="kit-action"><span class="kit-file">ZIP / ${samples.length} PDFs</span><button class="primary" data-sample="${esc(bundle.name)}">Process collection →</button><small>No download required.</small></div></section>
+    <div class="dataset-heading individual-heading"><div><h2>Documents in this collection</h2><p>Select individual files from the same archive.</p></div></div>
+    <form data-form="sample-batch" class="starter-selection"><div class="sample-toolbar"><span class="muted" id="sample-count">Select documents to process together.</span><div class="button-row"><button type="button" class="small" data-action="sample-select-all">Select all</button><button type="submit" class="small primary" data-sample-submit disabled>Process selected</button></div></div><div class="starter-pdfs">${samples.map((entry,i) => {
+      const prior = priorFor(entry);
+      return `<article class="starter-pdf"><div class="starter-pdf-top"><label><input type="checkbox" name="names" value="${esc(entry.name)}"><span class="sr-only">Select ${esc(entry.title)}</span><span aria-hidden="true">PDF ${String(i+1).padStart(2,'0')}</span></label></div><h3>${esc(entry.title)}</h3><p>${esc(entry.blurb)}</p>${prior ? `<a class="button-link" href="#invoice/${encodeURIComponent(prior.run_id)}">View saved result →</a>` : `<button type="button" data-sample="${esc(entry.name)}">Process document →</button>`}</article>`;
+    }).join('')}</div></form>`;
+  } catch(e) {
+    if (generation === state.generation) $('#dataset-content').innerHTML = errorHTML('The document collection could not load. Try again or return to upload your own invoice.', 'reload', 'Retry collection');
   }
-  const roles = [...cfg.roles].sort((a, b) => (a.role === "reviewer" ? -1 : 1));
-  $("#main").innerHTML =
-    `<div class="landing"><div class="eyebrow">INVOICE DESK</div><h1>A clear next step for every invoice.</h1><p>Choose your workspace to pick up where your team left off.</p>${location.hostname !== "localhost" && location.hostname !== "127.0.0.1" ? '<p class="demo-note">Hosted demo: the workspace resets to its sample suppliers and orders after a period of inactivity. Uploads are yours to make; nothing here pays anyone.</p>' : ""}<div class="role-cards">${roles
-      .map((r) => {
-        const admin = r.role === "admin";
-        return `<section class="card role-card"><span class="role-symbol" aria-hidden="true">${admin ? "▦" : "▤"}</span><div><h2>${admin ? "Procurement" : "Invoice review"}</h2><p>${admin ? "Give reviewers the suppliers and purchase orders they need." : "Check invoice details and move invoices toward approval."}</p></div><div class="role-purpose">${admin ? "Review requests → update records → reply" : "Upload → review → approve or request help"}</div><form data-form="login" data-role="${r.role}"><label>${admin ? "Procurement" : "Reviewer"} access code<input name="code" type="password" autocomplete="current-password" value="${esc(cfg.dev_codes?.[r.role] || "")}" required></label><button class="primary">Open ${admin ? "procurement" : "invoice review"} →</button></form></section>`;
-      })
-      .join(
-        "",
-      )}</div><p class="login-note">${cfg.dev_mode ? "Demo access codes are filled in so you can explore both workspaces." : "Use the access code provided by your team."}</p></div>`;
 }
 async function route() {
   const generation = ++state.generation;
@@ -477,10 +524,18 @@ async function route() {
     await renderLanding();
     return;
   }
-  const route = location.hash.slice(1) || (isAdmin() ? "queue" : "invoices");
+  let route = location.hash.slice(1) || (location.pathname === "/onboarding/dataset" ? "dataset" : location.pathname === "/app" ? (isAdmin() ? "queue" : "dashboard") : (isAdmin() ? "queue" : "home"));
+  if (onboardingComplete && ["home", "dataset"].includes(route)) route = "dashboard";
+  const onboarding = ["home", "dataset"].includes(route);
+  // Keep hash-based workspace navigation, but give onboarding its own URLs.
+  // replaceState preserves live upload state while moving into the workspace.
+  const canonicalURL = onboarding ? (route === "dataset" ? "/onboarding/dataset" : "/onboarding") : `/app#${route}`;
+  if (location.pathname + location.hash !== canonicalURL) history.replaceState(null, "", canonicalURL);
+  document.body.classList.toggle("welcome-screen", onboarding);
+  document.documentElement.classList.toggle("onboarding-shell", onboarding);
   if (
     (route === "queue" && !isAdmin()) ||
-    (route === "requests" && isAdmin())
+    (["requests", "home", "dataset"].includes(route) && isAdmin())
   ) {
     location.hash = isAdmin() ? "queue" : "invoices";
     return;
@@ -489,7 +544,7 @@ async function route() {
   document.querySelectorAll("[data-nav]").forEach((a) => {
     const active =
       a.dataset.nav ===
-      (route.startsWith("invoice/") || route.startsWith("invoices/") || route === "processing"
+      (route.startsWith("invoice/") || route.startsWith("invoices/") || route === "processing" || route.startsWith("batch")
         ? "invoices"
         : route.split("/")[0]);
     a.classList.toggle("active", active);
@@ -500,19 +555,28 @@ async function route() {
     (isAdmin() ? "Procurement / " : "Accounts payable / ") +
     (route.startsWith("invoice/")
       ? "Invoice details"
-      : {
+      : route.startsWith("batch")
+        ? "Batch check"
+        : {
+          home: "Welcome",
+          dataset: "Invoice dataset",
           invoices: "Invoices",
+          dashboard: "AI dashboard",
           pos: "Purchase orders",
           vendors: "Suppliers",
           activity: "Activity log",
           help: "Help",
+          "edge-cases": "Edge cases",
           processing: "Processing",
+          batch: "Batch",
           queue: "Requests",
           requests: "My requests",
         }[route] || "Invoices");
   $("#main").innerHTML = '<div class="skeleton" role="status">Loading…</div>';
   try {
-    if (route === "invoices") await inbox(generation);
+    if (route === "home") welcomePage();
+    else if (route === "dataset") await datasetPage(generation);
+    else if (route === "invoices" || route === "dashboard") await inbox(generation);
     else if (route.startsWith("invoices/")) {
       state.search = decodeURIComponent(route.slice(9));
       state.filter = "all";
@@ -520,6 +584,9 @@ async function route() {
     } else if (route.startsWith("invoice/"))
       await detail(decodeURIComponent(route.slice(8)), generation);
     else if (route === "processing") renderLive();
+    else if (route === "batch") renderBatch();
+    else if (route.startsWith("batch/"))
+      await openBatch(decodeURIComponent(route.slice(6)), generation);
     else if (route === "pos" || route === "vendors")
       await master(route, generation);
     else if (route.startsWith("pos/") || route.startsWith("vendors/")) {
@@ -530,6 +597,7 @@ async function route() {
     else if (route === "activity") await activity(generation);
     else if (route === "queue" || route === "requests") await queue(generation);
     else if (route === "help") help();
+    else if (route === "edge-cases") await edgeCases(generation);
     else {
       location.hash = "invoices";
     }
@@ -556,25 +624,47 @@ async function inbox(generation = state.generation) {
   ]);
   $("#main").innerHTML =
     header(
-      isAdmin() ? "Invoice history" : "Invoice reviews",
+      "Invoice dashboard",
       isAdmin()
         ? "Look up an invoice and its decision. New work arrives in Requests."
-        : "See what needs you, what’s with procurement, and what’s ready to continue.",
+        : "AI reads, matches and routes every invoice. Focus on the exceptions.",
       isAdmin()
         ? '<a class="button-link primary" href="#queue">Open requests →</a>'
         : uploadButton(),
     ) +
     `
-  ${!isAdmin() ? `<section class="upload-zone" id="drop-zone" aria-label="Drop an invoice PDF"><div class="upload-icon" aria-hidden="true">↥</div><div><h2>Add an invoice</h2><p>Drop a PDF here · up to 10 MB and 10 pages</p></div><button data-action="upload">Choose a PDF</button></section><details class="sample-details"><summary>Try a sample invoice</summary><div class="samples" id="samples">Loading samples…</div></details>` : ""}
-  <div id="upload-error"></div><section class="card"><div class="inbox-head"><div class="inbox-tools"><div class="filters" aria-label="Filter invoices"></div><input class="search" id="search" type="search" aria-label="Search invoices" placeholder="Search supplier or invoice…" value="${esc(state.search)}"></div></div><div id="invoice-table"></div></section><p class="footer-note">Your inbox keeps the latest result. Earlier reviews stay in the invoice’s activity.</p>`;
+  ${!isAdmin() ? `<section class="upload-zone" id="drop-zone" aria-label="Drop invoice PDFs or a ZIP archive"><div class="upload-icon" aria-hidden="true">↥</div><div><h2>Upload once. AI takes it from here.</h2><p>Drop PDFs or a ZIP of PDFs · automatic extraction, checks and procurement requests · up to 10 MB and 10 pages each, 25 per batch</p></div><div class="upload-actions"><button class="primary" data-action="upload">Choose files</button><button data-action="cloud-import">Other ways to add</button></div></section><details class="sample-details" id="sample-details"><summary>Invoice collection</summary><div class="samples" id="samples">Loading samples…</div></details>` : ""}
+  <div id="upload-error"></div><div id="ai-dashboard"></div><section class="card"><div class="inbox-head"><div class="inbox-tools"><div class="filters" aria-label="Filter invoices"></div><input class="search" id="search" type="search" aria-label="Search invoices" placeholder="Search supplier or invoice…" value="${esc(state.search)}"></div></div><div id="invoice-table"></div></section><p class="footer-note">Your inbox keeps the latest result. Earlier reviews stay in the invoice’s activity.</p>`;
   renderRows();
   loadSamples();
+}
+function confidenceBadge(c) {
+  if (!c || c.score == null) return '<span class="confidence unavailable">Not scored</span>';
+  return `<span class="confidence ${esc(c.band)}" title="${esc((c.reasons || []).join(' · '))}">${esc(c.band)} · ${c.score}/100</span>`;
+}
+function confidencePanel(c) {
+  if (!c) return '';
+  return `<section class="card confidence-panel"><div><h2>AI confidence ${confidenceBadge(c)}</h2><p>Based on extracted evidence and supplier / PO checks. Confidence does not override approval rules.</p></div><ul>${(c.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul></section>`;
+}
+function renderDashboard(rows) {
+  const el = $('#ai-dashboard');
+  if (!el) return;
+  const auto = rows.filter(r => r.disposition === 'approved' && r.decision_mode !== 'reviewer').length;
+  const low = rows.filter(r => r.confidence?.band === 'low').length;
+  const waiting = rows.filter(r => workState(r).key === 'waiting').length;
+  el.innerHTML = `<section class="ai-metrics" aria-label="Invoice automation overview">
+    <article class="card"><span>Invoices uploaded</span><strong>${rows.length}</strong><small>Latest result per attempt lineage</small></article>
+    <article class="card"><span>Automatically approved</span><strong>${auto}</strong><small>No reviewer input required</small></article>
+    <article class="card"><span>Low confidence</span><strong>${low}</strong><small>Prioritized for a closer look</small></article>
+    <article class="card"><span>With procurement</span><strong>${waiting}</strong><small>Requests include extracted details</small></article>
+  </section><section class="card confidence-guide"><b>Confidence bands</b><span>${confidenceBadge({band:'high',score:90})}–100 · Verified matches</span><span>Medium · 70–89 · Match needs attention</span><span>Low · 0–69 · Check the reading</span><small>Evidence score, not a probability. Final status includes budget, duplicate and policy checks.</small></section>`;
 }
 function workState(r) {
   return InvoiceWorkflow.workState(r, state.allTickets || []);
 }
 function renderRows() {
-  const rows = currentRows();
+  const rows = currentRows().sort((a, b) => Number(b.confidence?.band === "low" && b.disposition === "held") - Number(a.confidence?.band === "low" && a.disposition === "held"));
+  renderDashboard(rows);
   const count = (k) => rows.filter((r) => workState(r).key === k).length;
   $("#nav-count").textContent = isAdmin()
     ? ""
@@ -601,6 +691,7 @@ function renderRows() {
         ["waiting", "With procurement", count("waiting")],
         ["ready", "Ready to recheck", count("ready")],
       ];
+  filters.push(["low", "Low confidence", rows.filter(r => r.confidence?.band === "low").length]);
   if (!filters.some((f) => f[0] === state.filter)) state.filter = "all";
   $(".filters").innerHTML = filters
     .map(
@@ -611,7 +702,7 @@ function renderRows() {
   const filtered = rows.filter(
     (r) =>
       (state.filter === "all" ||
-        (state.filter === "attention"
+        (state.filter === "low" ? r.confidence?.band === "low" : state.filter === "attention"
           ? r.disposition === "held" && !state.procurementRuns?.has(r.run_id)
           : state.filter === "procurement"
             ? r.disposition === "held" && state.procurementRuns?.has(r.run_id)
@@ -622,11 +713,11 @@ function renderRows() {
         .includes(state.search.toLowerCase()),
   );
   $("#invoice-table").innerHTML = filtered.length
-    ? `<div class="table-scroll"><table><thead><tr><th>Invoice</th><th class="amount">Amount</th><th>${isAdmin() ? "Decision" : "Where it stands"}</th><th class="col-date">Updated</th><th>Next step</th></tr></thead><tbody>${filtered
+    ? `<div class="table-scroll"><table><thead><tr><th>Invoice</th><th class="amount">Amount</th><th>${isAdmin() ? "Decision" : "Where it stands"}</th><th>AI confidence</th><th class="col-date">Updated</th><th>Next step</th></tr></thead><tbody>${filtered
         .map((r) => {
           const summary = { ...(r.summary || {}), ...Object.fromEntries(Object.entries(r.display || {}).filter(([, v]) => v)) },
             w = workState(r);
-          return `<tr><td><a class="invoice-link" href="#invoice/${encodeURIComponent(r.run_id)}">${esc(summary.supplier_name || r.filename)}</a><small class="invoice-sub">${esc(summary.invoice_number ? "#" + summary.invoice_number + " · " + r.filename : r.filename)}</small></td><td class="amount">${summary.invoice_gross_total ? `${esc(r.display?.invoice_gross_total || summary.invoice_gross_total)}${r.display?.invoice_gross_total && !r.display?.currency ? '<small class="muted-line">currency not confirmed</small>' : ""}` : "—"}</td><td>${isAdmin() ? badge(r) : `<span class="badge work-${w.key}">${esc(w.label)}</span>`}</td><td class="col-date"><small>${esc(date(r.finished_at || r.created_at))}</small></td><td><a class="row-action" href="#invoice/${encodeURIComponent(r.run_id)}">${isAdmin() ? (r.disposition === "held" ? (state.procurementRuns?.has(r.run_id) ? "Resolve" : "With reviewer") : "View details") : w.action} →</a></td></tr>`;
+          return `<tr><td><a class="invoice-link" href="#invoice/${encodeURIComponent(r.run_id)}">${esc(summary.supplier_name || r.filename)}</a><small class="invoice-sub">${esc(summary.invoice_number ? "#" + summary.invoice_number + " · " + r.filename : r.filename)}</small></td><td class="amount">${summary.invoice_gross_total ? `${esc(r.display?.invoice_gross_total || summary.invoice_gross_total)}${r.display?.invoice_gross_total && !r.display?.currency ? '<small class="muted-line">currency not confirmed</small>' : ""}` : "—"}</td><td>${isAdmin() ? badge(r) : `<span class="badge work-${w.key}">${esc(w.label)}</span>`}</td><td>${confidenceBadge(r.confidence)}</td><td class="col-date"><small>${esc(date(r.finished_at || r.created_at))}</small></td><td><a class="row-action" href="#invoice/${encodeURIComponent(r.run_id)}">${isAdmin() ? (r.disposition === "held" ? (state.procurementRuns?.has(r.run_id) ? "Resolve" : "With reviewer") : "View details") : w.action} →</a></td></tr>`;
         })
         .join("")}</tbody></table></div>`
     : `<div class="empty"><h3>${state.search ? "No matching invoices" : state.filter === "waiting" ? "Nothing is waiting on procurement" : state.filter === "ready" ? "No replies to act on yet" : rows.length ? "You’re up to date" : "Your inbox is ready"}</h3><p>${state.search ? "Try a supplier, invoice number or filename." : !rows.length ? (isAdmin() ? "Invoices will appear when a reviewer uploads them." : "Add a PDF invoice to get started.") : "Invoices for this stage will appear here."}</p></div>`;
@@ -635,34 +726,103 @@ async function loadSamples() {
   if (!$("#samples")) return;
   try {
     state.samples = await api("/api/samples");
-    if ($("#samples"))
-      $("#samples").innerHTML = state.samples.length
-        ? state.samples
-            .map(
-              (s) =>
-                `<button class="small" data-sample="${esc(s.name)}" title="${esc(s.blurb)}">${esc(s.name.replaceAll("_", " ").replace(".pdf", ""))}</button>`,
-            )
-            .join("")
-        : "No samples available. Choose a PDF from your computer.";
+    if ($("#samples")) $("#samples").innerHTML = sampleLibraryHTML(state.samples);
   } catch (e) {
     if ($("#samples"))
       $("#samples").textContent =
         "Samples are unavailable. You can still upload a PDF.";
   }
 }
+// The sample library is grouped by the situation each file demonstrates.
+// One click runs a single PDF live; tick several (or a ZIP) to run a batch.
+const EXPECT_LABEL = {
+  approved: ["approved", "Approves"],
+  held: ["held", "Needs review"],
+  rejected: ["rejected", "Rejected"],
+  failed: ["failed", "Can’t process"],
+  mixed: ["queued", "Mixed"],
+  varies: ["queued", "Varies"],
+};
+function sampleLibraryHTML(samples, priorRuns = []) {
+  if (!samples.length)
+    return "No samples available. Choose a PDF from your computer.";
+  const groups = new Map();
+  samples.forEach((s) => {
+    const key = s.category || "Other samples";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(s);
+  });
+  return `<form data-form="sample-batch" class="sample-library"><div class="sample-toolbar"><span class="muted" id="sample-count">Choose one invoice to process, or select up to 25 for a batch.</span><div class="button-row"><button type="button" class="small" data-action="sample-select-all">${samples.length > 25 ? "Select first 25" : "Select all"}</button><button type="submit" class="small primary" data-sample-submit disabled>Process selected</button></div></div>${[...groups]
+    .map(
+      ([cat, list]) =>
+        `<section class="sample-group"><h3>${esc(cat)}</h3><ul>${list
+          .map((s) => {
+
+            const zip = isZipName(s.name);
+            const prior = priorRuns.find(r => r.filename === s.name && r.run_status === "completed");
+            return `<li class="sample-row"><label class="sample-pick"><input type="checkbox" name="names" value="${esc(s.name)}"><span class="sample-title">${esc(s.title || s.name)}</span></label><p class="sample-blurb">${esc(s.blurb || "")}</p>${prior ? `<a class="button-link small" href="#invoice/${encodeURIComponent(prior.run_id)}">View saved result</a>` : `<button type="button" class="small" data-sample="${esc(s.name)}" title="${esc(s.name)}">${zip ? "Run bundle" : "Process invoice"}</button>`}</li>`;
+          })
+          .join("")}</ul></section>`,
+    )
+    .join("")}</form>`;
+}
+function updateSampleSelection(form) {
+  const count = form.querySelectorAll('input[name=names]:checked').length;
+  form.querySelector('#sample-count').textContent = count ? `${count} selected · up to 25 PDFs per batch` : 'Choose one invoice to process, or select up to 25 for a batch.';
+  const submit = form.querySelector('[data-sample-submit]');
+  submit.disabled = !count || count > 25;
+  submit.textContent = count ? `Process ${count} selected` : 'Process selected';
+}
+function runSamplesBatch(names) {
+  if (names.length > 25) { notice("Choose up to 25 PDFs per batch."); return; }
+  if (!names.length) {
+    notice("Tick at least one sample first.");
+    return;
+  }
+  startBatchView(`${names.length} sample${names.length === 1 ? "" : "s"}`, () =>
+    post("/api/samples/run-batch", { names }, { timeout: 180000 }),
+  );
+}
 function intakeError(message) {
   const target = $("#upload-error") || $("#live-errors") || $("#main");
-  target.innerHTML = errorHTML(message, "upload", "Choose a PDF");
+  target.innerHTML = errorHTML(message, "upload", "Choose files");
 }
-async function upload(file) {
-  if (!file) return;
+function isZipName(name) {
+  return name.toLowerCase().endsWith(".zip");
+}
+function isPdfName(name) {
+  return name.toLowerCase().endsWith(".pdf");
+}
+// Entry point for the file picker, the drop zone and the sample library.
+// One PDF keeps the single live progress card; anything else (several PDFs,
+// a ZIP, a mix) becomes a batch.
+async function upload(fileOrFiles) {
+  const files = Array.from(
+    fileOrFiles instanceof File ? [fileOrFiles] : fileOrFiles || [],
+  );
+  if (!files.length) return;
+  const bad = files.filter((f) => !isPdfName(f.name) && !isZipName(f.name));
+  if (bad.length === files.length) {
+    intakeError(
+      "Choose PDF invoices or a ZIP archive of PDFs. Other file types aren’t supported.",
+    );
+    return;
+  }
+  if (bad.length)
+    notice(
+      `Left out (not PDF or ZIP): ${bad.map((f) => f.name).join(", ")}`,
+    );
+  const usable = files.filter((f) => isPdfName(f.name) || isZipName(f.name));
+  if (usable.length === 1 && isPdfName(usable[0].name)) {
+    uploadSingle(usable[0]);
+    return;
+  }
+  uploadBatch(usable);
+}
+function uploadSingle(file) {
   if (state.live && !state.live.finished) {
     notice("An invoice is already processing. You can follow its progress.");
     location.hash = "processing";
-    return;
-  }
-  if (!file.name.toLowerCase().endsWith(".pdf")) {
-    intakeError("Choose a PDF invoice. Other file types aren’t supported.");
     return;
   }
   if (file.size > 10 * 1024 * 1024) {
@@ -679,6 +839,277 @@ async function upload(file) {
   fd.append("file", file);
   beginLive(file.name, () =>
     api("/api/invoices", { method: "POST", body: fd, timeout: 180000 }),
+  );
+}
+// ---- batches: many PDFs or a ZIP -------------------------------------------
+// The server validates and expands the upload, then processes each document
+// in the background. We only poll the batch record; every finished document
+// is an ordinary run in the inbox.
+function startBatchView(label, request) {
+  state.batch = { label, sending: true, data: null, error: null, pollErrors: 0 };
+  const mine = state.batch;
+  location.hash = "batch";
+  renderBatch();
+  request()
+    .then((data) => {
+      if (state.batch !== mine) return;
+      mine.sending = false;
+      mine.data = data;
+      location.hash = `batch/${encodeURIComponent(data.batch_id)}`;
+      pollBatch(mine);
+    })
+    .catch((e) => {
+      if (state.batch !== mine) return;
+      mine.sending = false;
+      mine.error = e.message;
+      if (state.route.startsWith("batch")) renderBatch();
+    });
+}
+function uploadBatch(files) {
+  const tooBig = files.filter(
+    (f) => f.size > (isZipName(f.name) ? 60 : 10) * 1024 * 1024,
+  );
+  if (tooBig.length) {
+    intakeError(
+      `Too large to upload: ${tooBig.map((f) => f.name).join(", ")}. PDFs may be up to 10 MB and ZIP archives up to 60 MB.`,
+    );
+    return;
+  }
+  const fd = new FormData();
+  files.forEach((f) => fd.append("files", f));
+  startBatchView(
+    files.length === 1 ? files[0].name : `${files.length} files`,
+    () =>
+      api("/api/invoices/batch", {
+        method: "POST",
+        body: fd,
+        timeout: 180000,
+      }),
+  );
+}
+async function pollBatch(batch) {
+  if (state.batch !== batch || !batch.data) return;
+  if (batch.data.status === "done") {
+    if (state.route.startsWith("batch")) renderBatch();
+    return;
+  }
+  try {
+    batch.data = await api(
+      `/api/batches/${encodeURIComponent(batch.data.batch_id)}`,
+    );
+    batch.error = null;
+    batch.pollErrors = 0;
+  } catch (e) {
+    batch.pollErrors++;
+    if (e.status === 404) {
+      batch.error =
+        "This batch is no longer tracked (the server may have restarted). Finished invoices are in the inbox.";
+      batch.data.status = "done";
+    } else if (batch.pollErrors >= 3)
+      batch.error =
+        "Connection interrupted. We’ll keep checking. Finished invoices already appear in the inbox.";
+  }
+  if (state.route.startsWith("batch")) renderBatch();
+  if (batch.data.status === "done") {
+    if (!state.route.startsWith("batch"))
+      notice("Your batch has finished. Results are in Invoices.");
+    return;
+  }
+  setTimeout(() => pollBatch(batch), 1200);
+}
+async function openBatch(id, generation) {
+  if (state.batch?.data?.batch_id === id) {
+    renderBatch();
+    if (state.batch.data.status !== "done") pollBatch(state.batch);
+    return;
+  }
+  const data = await api(`/api/batches/${encodeURIComponent(id)}`);
+  if (generation !== state.generation) return;
+  state.batch = {
+    label: `${data.total} files`,
+    sending: false,
+    data,
+    error: null,
+    pollErrors: 0,
+  };
+  renderBatch();
+  if (data.status !== "done") pollBatch(state.batch);
+}
+function batchItemStatus(item) {
+  if (item.status === "skipped") return ["skipped", "Skipped"];
+  if (item.status === "failed") return ["failed", "Couldn’t process"];
+  if (item.status === "running") return ["running", "Checking…"];
+  if (item.status === "queued") return ["queued", "Waiting"];
+  const key =
+    {
+      AUTO_APPROVE: "approved",
+      APPROVE_WITH_EXCEPTION: "approved",
+      HOLD_REVIEW: "held",
+      REJECT: "rejected",
+    }[item.route] || "done";
+  const label =
+    {
+      AUTO_APPROVE: "Approved",
+      APPROVE_WITH_EXCEPTION: "Approved · exception",
+      HOLD_REVIEW: "Needs review",
+      REJECT: "Rejected",
+    }[item.route] || "Done";
+  return [key, label];
+}
+function renderBatch() {
+  if (!state.route.startsWith("batch")) return;
+  const b = state.batch;
+  if (!b) {
+    $("#main").innerHTML =
+      header(
+        "No batch is processing",
+        "Upload several PDFs or a ZIP to get started.",
+        uploadButton("Choose files"),
+      ) + '<a href="#invoices">Back to invoices</a>';
+    return;
+  }
+  const d = b.data;
+  const counts = d?.counts || {};
+  const finished = (counts.done || 0) + (counts.failed || 0);
+  if (finished > 0) completeOnboarding();
+  const toDo = (d?.total || 0) - (counts.skipped || 0);
+  const done = d?.status === "done";
+  const title = b.sending
+    ? "Uploading your files"
+    : b.error && !d
+      ? "We couldn’t start this batch"
+      : done
+        ? "Your batch is complete"
+        : "Checking your invoices";
+  const sub = b.sending
+    ? `${esc(b.label)} · validating and unpacking`
+    : d
+      ? `${finished} of ${toDo} document${toDo === 1 ? "" : "s"} checked${counts.skipped ? ` · ${counts.skipped} skipped` : ""}`
+      : esc(b.label);
+  const pct = toDo ? Math.round((finished / toDo) * 100) : 0;
+  const rows = (d?.items || [])
+    .map((it) => {
+      const [cls, label] = batchItemStatus(it);
+      const link = it.run_id
+        ? `<a class="button-link small" href="#invoice/${encodeURIComponent(it.run_id)}">${it.route === "HOLD_REVIEW" ? "Review" : "Open"} →</a>`
+        : "";
+      const meta = [
+        it.source.startsWith("zip:") ? `from ${esc(it.source.slice(4))}` : "",
+        it.reason ? esc(it.reason) : "",
+        it.status === "done" && it.explanation ? esc(it.explanation) : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return `<li class="batch-row ${cls}"><span class="badge ${cls}">${label}</span><div class="batch-main"><b>${esc(it.filename)}</b>${meta ? `<p>${meta}</p>` : ""}</div>${link}</li>`;
+    })
+    .join("");
+  $("#main").innerHTML = `<div class="reading-wrap batch-wrap"><a href="#invoices" class="back-link">← Back to invoices${!done && d ? " · processing continues" : ""}</a><section class="card reading-card"><div class="eyebrow">BATCH CHECK</div><h1>${title}</h1><p class="reading-file">${sub}</p>${d ? `<div class="batch-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>` : ""}<div id="live-errors">${b.error ? errorHTML(b.error, "inbox", "Back to invoices") : ""}</div>${rows ? `<ul class="batch-list">${rows}</ul>` : ""}${done ? `<div class="reading-result"><p>${counts.done ? `${counts.done} document${counts.done === 1 ? "" : "s"} checked.` : ""} ${counts.failed ? `${counts.failed} couldn’t be read — open them for recovery options.` : ""} Open the dashboard for confidence scores and review items. Automatic procurement requests are in My requests.</p><div class="button-row"><a class="button-link primary" href="#dashboard">See results in dashboard →</a><a class="button-link" href="#requests">View procurement requests</a></div></div>` : d ? '<p class="reading-foot">You can leave this page. Each result appears in your inbox as it finishes.</p>' : ""}</section></div>`;
+}
+// ---- cloud import (Google Drive / Cloud Storage) -----------------------------
+// The server reports whether each source is connected. When it is not, the
+// modal explains what a deployment needs; when it is, files in the configured
+// folder/bucket can be picked and imported as a batch.
+async function cloudImportModal() {
+  openModal({
+    title: "Other ways to add invoices",
+    subtitle: "Every route ends in the same checks as an upload.",
+    body: '<p class="muted">Checking connections…</p>',
+  });
+  let sources;
+  try {
+    sources = await api("/api/sources");
+  } catch (e) {
+    $("#modal-body").innerHTML = errorHTML(e.message, "");
+    return;
+  }
+  const row = (s) => {
+    let status, action;
+    if (s.mode === "links") {
+      status = "Ready · paste Google Drive “anyone with the link”, public Cloud Storage or any https link";
+      action = `<form data-form="source-import" data-kind="link" class="link-form"><textarea name="urls" rows="3" placeholder="One link per line" aria-label="Links to PDF or ZIP files"></textarea><div class="button-row"><button class="small primary" type="submit">Import links</button></div><div class="action-error"></div></form>`;
+    } else if (s.mode === "folder") {
+      status = `${s.remote ? "Watching a shared Google Drive folder" : "Watching a folder on this machine"} · checked every ${s.poll_seconds}s · ${s.pending ? `<b>${s.pending} new</b>` : "nothing new"} · ${s.picked_up} picked up since start${s.reason ? ` · <span class="error-text">${esc(s.reason)}</span>` : ""}`;
+      action = `<form data-form="folder-settings" class="folder-form"><label class="folder-label">Folder to watch — a Google Drive folder link or a path on this machine<input name="dir" type="text" value="${esc(s.scope)}" spellcheck="false" placeholder="https://drive.google.com/drive/folders/… or /Users/you/Dropbox/Invoices"></label><div class="button-row"><button class="small primary" type="submit">Save folder</button>${s.is_default ? "" : `<button class="small" type="button" data-action="reset-folder" title="Back to ${esc(s.default_scope)}">Use default</button>`}<button class="small" type="button" data-action="browse-source" data-kind="folder">${s.pending ? "See waiting files" : "Refresh"}</button>${s.pending ? '<button class="small" type="button" data-action="import-folder-all">Import all now</button>' : ""}</div><div class="action-error"></div></form>`;
+    } else if (s.configured) {
+      status = `Connected · ${esc(s.scope)}`;
+      action = `<button class="small primary" data-action="browse-source" data-kind="${esc(s.kind)}">Browse</button>`;
+    } else {
+      status = `Not connected · ${esc(s.reason)}`;
+      action = '<span class="badge queued">Not connected</span>';
+    }
+    const inline = s.mode === "links" || s.mode === "folder";
+    return `<li class="source-row"><div class="source-main"><b>${esc(s.label)}</b><p>${status}</p>${inline ? action : ""}${!s.configured || s.mode === "folder" ? `<details class="compact-details"><summary>${s.configured ? "How it works" : "How to connect"}</summary><ol class="source-setup">${s.setup.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}</div>${inline ? "" : `<div class="source-action">${action}</div>`}</li>`;
+  };
+  $("#modal-body").innerHTML = `<ul class="source-list">${sources.map(row).join("")}</ul><p class="muted source-foot">Files from any connector go through the same identity, duplicate and policy checks as an upload, and appear in the inbox one by one. Google Drive, Cloud Storage and mailbox connections are deployment settings (a service account or app password), not something a reviewer does here.</p>`;
+}
+async function browseSource(kind) {
+  $("#modal-body").innerHTML = '<p class="muted">Listing files…</p>';
+  let files;
+  try {
+    files = await api(`/api/sources/${encodeURIComponent(kind)}/files`, {
+      timeout: 60000,
+    });
+  } catch (e) {
+    $("#modal-body").innerHTML = errorHTML(e.message, "cloud-import", "Back");
+    return;
+  }
+  if (!files.length) {
+    $("#modal-body").innerHTML =
+      `<p class="muted modal-empty">${kind === "folder" ? "Nothing is waiting in the folder. Drop PDFs or ZIPs in and they are picked up automatically." : "No PDF or ZIP files in the configured location."}</p><div class="button-row"><button type="button" class="small" data-action="cloud-import">Back</button></div>`;
+    return;
+  }
+  $("#modal-body").innerHTML = `<form data-form="source-import" data-kind="${esc(kind)}"><ul class="record-list source-files">${files
+    .map(
+      (f) =>
+        `<li class="record-row"><label><input type="checkbox" name="ids" value="${esc(f.id)}" checked> ${esc(f.name)}</label><span class="record-meta">${f.from ? `${esc(f.from)} · ` : ""}${(f.size / 1024 / 1024).toFixed(1)} MB${f.modified ? ` · ${esc(date(f.modified))}` : ""}</span></li>`,
+    )
+    .join("")}</ul><div class="button-row"><button class="primary" type="submit">Import selected</button><button type="button" data-action="cloud-import">Back</button></div><div class="action-error"></div></form>`;
+}
+async function submitSourceImport(form) {
+  const kind = form.dataset.kind;
+  const body = {};
+  let count;
+  if (kind === "link") {
+    body.urls = (form.querySelector("textarea[name=urls]")?.value || "")
+      .split(/\s+/)
+      .map((u) => u.trim())
+      .filter(Boolean);
+    count = body.urls.length;
+    if (!count) {
+      form.querySelector(".action-error").innerHTML = errorHTML("Paste at least one link.", "");
+      return;
+    }
+  } else {
+    body.ids = [...form.querySelectorAll("input[name=ids]:checked")].map((i) => i.value);
+    count = body.ids.length;
+    if (!count) {
+      form.querySelector(".action-error").innerHTML = errorHTML("Choose at least one file.", "");
+      return;
+    }
+  }
+  closeModal();
+  const label = { link: "link", folder: "file from the watched folder", mail: "e-mail" }[kind] || "file from cloud";
+  startBatchView(`${count} ${label}${count === 1 ? "" : "s"}`, () =>
+    post(`/api/sources/${encodeURIComponent(kind)}/import`, body, { timeout: 180000 }),
+  );
+}
+async function saveFolderSettings(form, body) {
+  const payload = body || { dir: form.querySelector("input[name=dir]").value };
+  const button = form.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    const st = await post("/api/sources/folder/settings", payload);
+    notice(`Now watching ${st.scope}`);
+    cloudImportModal();
+  } catch (e) {
+    form.querySelector(".action-error").innerHTML = errorHTML(e.message, "");
+    button.disabled = false;
+  }
+}
+function importFolderAll() {
+  closeModal();
+  startBatchView("everything waiting in the folder", () =>
+    post("/api/sources/folder/import", { ids: [] }, { timeout: 180000 }),
   );
 }
 async function beginLive(filename, request) {
@@ -743,6 +1174,7 @@ async function pollLive(live) {
       live.finished =
         live.requestDone &&
         !["running", "queued"].includes(live.detail.run_status);
+      if (live.finished) completeOnboarding();
       live.error = null;
     } else if (live.requestDone && live.error) live.finished = true;
     live.pollErrors = 0;
@@ -809,11 +1241,12 @@ function renderLive() {
       })
       .join(
         "",
-      )}</div><div id="live-errors">${l.error ? errorHTML(l.error, "inbox", "Back to invoices") : ""}</div>${stopped && l.detail ? `<div class="reading-result">${badge(l.detail)}<p>${l.detail.disposition === "approved" ? "This invoice is approved. No further review is needed." : l.detail.disposition === "held" ? "We need your help with a few details. Open the invoice to see what to do next." : l.detail.run_status === "failed" ? "We couldn’t read this PDF. Open the invoice for recovery options." : "Open the result to see why this invoice was rejected."}</p><a class="button-link primary" href="#invoice/${encodeURIComponent(l.runId)}">${l.detail.disposition === "held" ? "Review invoice" : "View result"} →</a></div>` : !stopped ? '<p class="reading-foot">You can leave this page. The result will appear in your inbox.</p>' : ""}</section></div>`;
+      )}</div><div id="live-errors">${l.error ? errorHTML(l.error, "inbox", "Back to invoices") : ""}</div>${stopped && l.detail ? `<div class="reading-result">${badge(l.detail)}<p>${l.detail.disposition === "approved" ? "This invoice is approved. No further review is needed." : l.detail.disposition === "held" ? "We need your help with a few details. Open the invoice to see what to do next." : l.detail.run_status === "failed" ? "We couldn’t read this PDF. Open the invoice for recovery options." : (l.detail.snapshot?.codes ?? []).includes("UNSUPPORTED_DOCUMENT_TYPE") ? "This file doesn’t look like an invoice, so nothing was read or approved. Open it to see what we found." : "Open the result to see why this invoice was rejected."}</p><a class="button-link primary" href="#invoice/${encodeURIComponent(l.runId)}">${l.detail.disposition === "held" ? "Review invoice" : "View result"} →</a></div>` : !stopped ? '<p class="reading-foot">You can leave this page. The result will appear in your inbox.</p>' : ""}</section></div>`;
 }
 async function detail(id, generation) {
   const d = await api(`/api/runs/${encodeURIComponent(id)}`);
   if (generation !== state.generation) return;
+  if (["completed", "failed"].includes(d.run_status)) completeOnboarding();
   if (["running", "queued"].includes(d.run_status)) {
     if (!state.live || state.live.runId !== id) {
       state.live = {
@@ -897,6 +1330,11 @@ async function detail(id, generation) {
     (r) => r.document_id === d.document_id && r.disposition === "approved",
   );
   const decisionCodes = new Set(dec?.codes ?? []);
+  const notInvoice =
+    key === "rejected" && decisionCodes.has("UNSUPPORTED_DOCUMENT_TYPE");
+  const docType = d.events
+    .filter((e) => e.event_type === "document_type")
+    .at(-1)?.payload;
   const blockedOnly =
     key === "rejected" &&
     decisionCodes.size > 0 &&
@@ -923,9 +1361,11 @@ async function detail(id, generation) {
           : "Your changes are ready to check"
       : key === "approved"
         ? "Invoice approved"
-        : key === "rejected"
-          ? "Invoice rejected"
-          : "Invoice could not be processed";
+        : notInvoice
+          ? "This doesn’t look like an invoice"
+          : key === "rejected"
+            ? "Invoice rejected"
+            : "Invoice could not be processed";
   const description = noReading
     ? failureHelp(d)
     : key === "held"
@@ -948,9 +1388,11 @@ async function detail(id, generation) {
           : "This is an earlier result. Open the latest result to continue."
       : key === "approved"
         ? `Added to the approved purchase order balance${d.decision_mode === "automatic_exception" ? " using the permitted budget exception" : ""}. ${d.decision_mode === "reviewer" ? "Approved after review." : "No further action is needed."}`
-        : rejectionHelp(dec);
+        : notInvoice
+          ? notInvoiceHelp(docType)
+          : rejectionHelp(dec);
   $("#main").innerHTML =
-    `<a href="${isAdmin() ? "#queue" : "#invoices"}" class="back-link">← ${isAdmin() ? "Requests" : "Invoice reviews"}</a><div class="page-heading detail-title"><div><h1>${esc(s.supplier_name || d.filename)}</h1><p>${esc(s.invoice_number ? "Invoice #" + s.invoice_number + " · " : "")}${esc(d.filename)} · ${esc(date(d.created_at))}</p></div>${uploadButton("Upload another")}</div>${child ? `<div class="success-message">This invoice has a newer result. <a href="#invoice/${encodeURIComponent(latestDescendant(id))}">Open latest result →</a></div>` : ""}<section class="card outcome ${key}${rechecked && persistent.size ? " rechecked" : ""}"><div class="outcome-head">${badge(d)}${rechecked && persistent.size ? `<span class="badge still-open">${persistent.size} still unresolved</span>` : ""}<h2>${title}</h2></div><p>${esc(description)}</p>${Object.keys(fields).length ? `<dl class="invoice-summary"><div><dt>Invoice total</dt><dd>${esc(s.invoice_gross_total ? (rv?.display?.invoice_gross_total ? s.invoice_gross_total : `${curr} ${s.invoice_gross_total}`) : "Not confirmed")}</dd></div><div><dt>Invoice date</dt><dd>${esc(s.invoice_date || "Not confirmed")}</dd></div><div><dt>Purchase order</dt><dd>${esc(s.po_reference || "Not selected")}</dd></div><div><dt>Supplier</dt><dd>${esc(s.supplier_name || "Not confirmed")}</dd></div></dl>` : ""}${noReading && !isAdmin() ? `<div class="button-row" style="margin-top:16px">${!child ? '<button class="primary" data-action="retry-reading">Try reading again</button>' : ""}<button data-action="upload">Upload a replacement PDF</button></div><div id="retry-error"></div>` : ""}${key === "rejected" ? duplicateLink(d, dec) : ""}</section><div class="review-layout"><div class="review-panel">${canReview ? reviewHTML(rv) : canProcure || (isAdmin() && blockedOnly && !!rv && !child && !postedRelated) ? procurementHTML(rv) : canRecheckRejected ? blockedHTML(rv) : `${isAdmin() && !child && tickets.length ? terminalRequestsHTML() : ""}${summaryHTML(fields)}`}<div id="review-notice" role="status"></div></div><section class="card document-panel" aria-label="Invoice document"><div class="document-header"><h2>Original invoice</h2><button class="mobile-document-toggle small" data-action="toggle-preview" aria-expanded="false">Show document</button><div class="page-controls" id="page-controls"></div></div><div class="document-canvas" id="document-canvas"><p>Loading document…</p></div><div class="document-caption" id="document-caption">Compare these details with your invoice.</div></section></div>${detailsHTML(d, dec, rv)}<p class="footer-note">Approval records an amount against a purchase order. This demo does not send payments.</p>`;
+    `<a href="${isAdmin() ? "#queue" : "#invoices"}" class="back-link">← ${isAdmin() ? "Requests" : "Invoice reviews"}</a><div class="page-heading detail-title"><div><h1>${esc(s.supplier_name || d.filename)}</h1><p>${esc(s.invoice_number ? "Invoice #" + s.invoice_number + " · " : "")}${esc(d.filename)} · ${esc(date(d.created_at))}</p></div>${uploadButton("Upload another")}</div>${confidencePanel(d.confidence)}${tickets.some(t => t.status === "open" && t.requested_by === "invoice-ai") ? `<div class="success-message">AI has created a procurement request with the invoice details. No request form is needed. <a href="${isAdmin() ? "#queue" : "#requests"}">View request →</a></div>` : ""}${child ? `<div class="success-message">This invoice has a newer result. <a href="#invoice/${encodeURIComponent(latestDescendant(id))}">Open latest result →</a></div>` : ""}<section class="card outcome ${key}${rechecked && persistent.size ? " rechecked" : ""}"><div class="outcome-head">${badge(d)}${rechecked && persistent.size ? `<span class="badge still-open">${persistent.size} still unresolved</span>` : ""}<h2>${title}</h2></div><p>${esc(description)}</p>${Object.keys(fields).length ? `<dl class="invoice-summary"><div><dt>Invoice total</dt><dd>${esc(s.invoice_gross_total ? (rv?.display?.invoice_gross_total ? s.invoice_gross_total : `${curr} ${s.invoice_gross_total}`) : "Not confirmed")}</dd></div><div><dt>Invoice date</dt><dd>${esc(s.invoice_date || "Not confirmed")}</dd></div><div><dt>Purchase order</dt><dd>${esc(s.po_reference || "Not selected")}</dd></div><div><dt>Supplier</dt><dd>${esc(s.supplier_name || "Not confirmed")}</dd></div></dl>` : ""}${noReading && !isAdmin() ? `<div class="button-row" style="margin-top:16px">${!child ? '<button class="primary" data-action="retry-reading">Try reading again</button>' : ""}<button data-action="upload">Upload a replacement PDF</button></div><div id="retry-error"></div>` : ""}${notInvoice ? notInvoicePanel(docType, child) : key === "rejected" ? duplicateLink(d, dec) : ""}</section><div class="review-layout"><div class="review-panel">${canReview ? reviewHTML(rv) : canProcure || (isAdmin() && blockedOnly && !!rv && !child && !postedRelated) ? procurementHTML(rv) : canRecheckRejected ? blockedHTML(rv) : `${isAdmin() && !child && tickets.length ? terminalRequestsHTML() : ""}${summaryHTML(fields)}`}<div id="review-notice" role="status"></div></div><section class="card document-panel" aria-label="Invoice document"><div class="document-header"><h2>Original invoice</h2><button class="mobile-document-toggle small" data-action="toggle-preview" aria-expanded="false">Show document</button><div class="page-controls" id="page-controls"></div></div><div class="document-canvas" id="document-canvas"><p>Loading document…</p></div><div class="document-caption" id="document-caption">Compare these details with your invoice.</div></section></div>${detailsHTML(d, dec, rv)}<p class="footer-note">Approval records an amount against a purchase order. This demo does not send payments.</p>`;
   renderDocument(id, generation);
 }
 function latestDescendant(id) {
@@ -971,6 +1413,23 @@ function failureHelp(d) {
   if (/parse_error|unreadable/.test(reason))
     return "The PDF could not be opened. Export a new, unencrypted copy or ask the supplier for a readable PDF, then upload it here.";
   return "The reading was interrupted before we had enough information. Try reading it again, or upload a clearer copy. Nothing has been approved.";
+}
+function notInvoiceHelp(docType) {
+  const label = docType?.label && docType.label !== "not an invoice" ? `It reads as a ${docType.label}.` : "";
+  return `Nothing was read by the model and there is nothing to fill in. ${label} No amount was added to any purchase order.`.replace(/\s+/g, " ");
+}
+function notInvoicePanel(docType, child) {
+  const reasons = docType?.reasons ?? [];
+  const sig = docType?.signals ?? {};
+  const found = [
+    sig.invoice_words ? "invoice wording" : null,
+    sig.amounts ? `${sig.amounts} amount${sig.amounts === 1 ? "" : "s"}` : null,
+    sig.total_words ? "a total line" : null,
+    sig.currency_marks ? "a currency" : null,
+    sig.tax_words ? "a tax line" : null,
+    sig.dates ? `${sig.dates} date${sig.dates === 1 ? "" : "s"}` : null,
+  ].filter(Boolean);
+  return `<div class="not-invoice"><h3>What we found</h3><ul>${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>${sig.chars !== undefined ? `<p class="muted-line">Signals on the page: ${found.length ? esc(found.join(", ")) : "none of the usual invoice signals"}.</p>` : ""}${!isAdmin() ? `<div class="button-row" style="margin-top:14px"><button class="primary" data-action="upload">Upload the invoice</button>${!child ? '<button data-action="read-as-invoice" title="Skip the document-type check and read this file as an invoice">Read as an invoice anyway</button>' : ""}</div><div id="retry-error"></div>` : ""}<p class="muted-line" style="margin-top:12px">Every case we check for is listed under <a href="#edge-cases">Edge cases</a>.</p></div>`;
 }
 function rejectionHelp(dec) {
   const codes = dec?.codes ?? [];
@@ -1597,7 +2056,7 @@ function drawPage() {
   if (block && block.page === state.page)
     overlay = `<div class="evidence-box" style="left:${Math.max(0, ((block.x0 - 2) / pg.width) * 100)}%;top:${Math.max(0, ((block.top - 2) / pg.height) * 100)}%;width:${Math.min(100, ((block.x1 - block.x0 + 4) / pg.width) * 100)}%;height:${((block.bottom - block.top + 4) / pg.height) * 100}%"></div>`;
   $("#document-canvas").innerHTML =
-    `<div class="pdf-page"><img src="/api/runs/${encodeURIComponent(state.detail.run_id)}/page/${state.page}?access_code=${encodeURIComponent(getToken() || "")}" alt="Original invoice, page ${state.page}">${overlay}</div>`;
+    `<div class="pdf-page"><img src="/api/runs/${encodeURIComponent(state.detail.run_id)}/page/${state.page}?role=${encodeURIComponent(getToken() || "")}" alt="Original invoice, page ${state.page}">${overlay}</div>`;
   $("#document-canvas img").addEventListener("error", () => {
     $("#document-canvas").innerHTML = errorHTML(
       "This page could not be displayed. Reload the preview or use your original PDF.",
@@ -1631,7 +2090,13 @@ function activityText(event) {
       rule_evaluated: "Checked the purchase order budget.",
       decision: p.explanation || "Saved the result.",
       duplicate_submission: "Found a previously uploaded copy of this file.",
-      operational_failure: "Could not read the PDF.",
+      operational_failure: `Could not read the PDF${p.reason ? ` (${p.reason})` : ""}.`,
+      document_type: p.forced
+        ? "Reviewer asked for this file to be read as an invoice."
+        : p.invoice_like
+          ? "Checked the document type: looks like an invoice."
+          : `Checked the document type: ${p.label || "not an invoice"}. Nothing was sent to the model.`,
+      scan_self_check: "Cross-checked the scanned readings.",
       vendor_onboarded: `Added supplier ${p.name || ""}.`,
       po_created: `Added purchase order ${p.po_id || ""}.`,
       budget_exhausted: "Document reading stopped before completion.",
@@ -1807,7 +2272,7 @@ function renderRequests() {
     list
       .map(
         (t) =>
-          `<article class="request-row"><div class="request-main"><div class="request-title"><h2>${esc(t.supplier_name || "Supplier not read")}</h2><span class="badge ${esc(t.status)}">${t.status === "open" ? (isAdmin() ? "To do" : "With procurement") : t.status === "resolved" ? "Completed" : "Declined"}</span></div><p>${esc(t.kind_label || TICKET_KINDS[t.kind])}${t.po_reference ? ` · ${esc(t.po_reference)}` : ""}${t.standalone && t.amount_minor != null ? ` · ${esc(money(t.amount_minor, t.currency))}` : ""}</p><small>${esc(t.standalone ? "Raised from My requests" : t.filename)} · ${esc(date(t.created_at))}</small>${t.note ? `<p class="request-note">${esc(t.note)}</p>` : ""}${t.status === "open" && t.fulfilled ? `<p class="saved-mark">✓ ${esc(t.fact)} Closing automatically.</p>` : ""}${t.status !== "open" ? `<div class="request-answer"><b>Procurement’s reply</b><p>${esc(t.resolution_note || "No note was included.")}</p></div>` : ""}</div>${
+          `<article class="request-row"><div class="request-main"><div class="request-title"><h2>${esc(t.supplier_name || "Supplier not read")}</h2><span class="badge ${esc(t.status)}">${t.status === "open" ? (isAdmin() ? "To do" : "With procurement") : t.status === "resolved" ? "Completed" : "Declined"}</span></div><p>${esc(t.kind_label || TICKET_KINDS[t.kind])}${t.po_reference ? ` · ${esc(t.po_reference)}` : ""}${t.standalone && t.amount_minor != null ? ` · ${esc(money(t.amount_minor, t.currency))}` : ""}</p><small>${t.requested_by === "invoice-ai" ? "AI-created · " : ""}${esc(t.standalone ? "Raised from My requests" : t.filename)} · ${esc(date(t.created_at))}</small>${t.note ? `<p class="request-note">${esc(t.note)}</p>` : ""}${t.status === "open" && t.fulfilled ? `<p class="saved-mark">✓ ${esc(t.fact)} Closing automatically.</p>` : ""}${t.status !== "open" ? `<div class="request-answer"><b>Procurement’s reply</b><p>${esc(t.resolution_note || "No note was included.")}</p></div>` : ""}</div>${
             t.standalone
               ? isAdmin() && t.status === "open"
                 ? `<button class="button-link primary" data-action="resolve-standalone" data-id="${esc(t.ticket_id)}">Resolve request</button>`
@@ -1818,7 +2283,7 @@ function renderRequests() {
           }</article>`,
       )
       .join("") ||
-    `<div class="empty"><h2>${q ? "No matching requests" : state.requestFilter === "open" ? "No requests waiting" : "No requests here yet"}</h2><p>${q ? "Try a different supplier, order number or note." : isAdmin() ? "New requests from reviewers will appear here." : "Ask from an invoice, or use New request above for a supplier or purchase order you know you will need."}</p><a href="#invoices">${isAdmin() ? "View invoice history" : "Go to invoice reviews"} →</a></div>`;
+    `<div class="empty"><h2>${q ? "No matching requests" : state.requestFilter === "open" ? "No requests waiting" : "No requests here yet"}</h2><p>${q ? "Try a different supplier, order number or note." : isAdmin() ? "AI-created requests and reviewer requests will appear here." : "Ask from an invoice, or use New request above for a supplier or purchase order you know you will need."}</p><a href="#invoices">${isAdmin() ? "View invoice history" : "Go to invoice reviews"} →</a></div>`;
 }
 async function refreshQueueCount() {
   if (!isAdmin()) return;
@@ -1839,13 +2304,143 @@ async function activity(generation) {
     ) +
     `<section class="card card-pad">${events.length ? events.map((e) => `<div class="activity-row"><time>${esc(dateTime(e.ts))}</time><div><a href="#invoice/${encodeURIComponent(e.run_id)}">${esc(e.filename || "Invoice")}</a><p>${esc(activityText(e))}</p></div></div>`).join("") : '<div class="empty"><p>Activity will appear after you upload an invoice.</p></div>'}</section>`;
 }
+const PROBE_ICON = {
+  confirmed: "✅",
+  not_reproduced: "⚠️",
+  unexpected: "❌",
+  error: "❌",
+  skipped: "—",
+};
+const PROBE_LABEL = {
+  confirmed: "Verified",
+  not_reproduced: "Not reproducible",
+  unexpected: "Differs from this row",
+  error: "Probe error",
+  skipped: "Not run",
+};
+// Mirrors Observation.line() in tools/edge_case_probe.py: what the run did.
+function observedLine(o) {
+  const bits = [];
+  if (o.http_status != null) bits.push(`HTTP ${o.http_status}`);
+  if (o.route) bits.push(o.route + (o.codes?.length ? ` [${o.codes.join(", ")}]` : ""));
+  if (o.run_status && o.run_status !== "completed") bits.push(`run ${o.run_status}`);
+  if (o.failure_reason) bits.push(`reason “${o.failure_reason}”`);
+  if (o.doc_type) bits.push(`type “${o.doc_type}”`);
+  if (o.model_calls != null)
+    bits.push(`${o.model_calls} model call${o.model_calls === 1 ? "" : "s"}`);
+  if (o.posted != null) bits.push(o.posted ? "posted" : "nothing posted");
+  if (o.error) bits.push(`error ${o.error}`);
+  return bits.join(" · ");
+}
+function probeCell(probe) {
+  if (!probe)
+    return '<span class="probe-none">Not run</span>';
+  const icon = PROBE_ICON[probe.verdict] || "?";
+  const label = PROBE_LABEL[probe.verdict] || probe.verdict;
+  const when = probe.ran_at ? ` <span class="probe-when">${esc(date(probe.ran_at))}</span>` : "";
+  const runs = (probe.observations || [])
+    .map(
+      (o) =>
+        `<li><span class="probe-observed">${esc(observedLine(o))}</span>${o.note ? `<span class="probe-note">${esc(o.note)}</span>` : ""}${o.result_file ? `<button class="link-button" data-action="open-result" data-result="${esc(o.result_file)}" data-fixture="${esc(o.fixture)}">Open saved result →</button>` : `<span class="probe-none">${esc(o.fixture)} — refused before a result existed</span>`}</li>`,
+    )
+    .join("");
+  return `<div class="probe probe-${esc(probe.verdict)}"><span class="probe-verdict">${icon} ${esc(label)}${when}</span>${runs ? `<ul class="probe-runs">${runs}</ul>` : ""}${probe.note ? `<p class="probe-caveat">${esc(probe.note)}</p>` : ""}</div>`;
+}
+// The saved result of a probe upload, rendered from the record on disk. No
+// upload, no reading, no decision is made here — this is what happened then.
+async function openResult(name, fixture) {
+  let data;
+  try {
+    data = await api(`/api/edge-cases/result/${encodeURIComponent(name)}`);
+  } catch (e) {
+    notice("That saved result is not on the server. Re-run tools/edge_case_probe.py to rebuild it.");
+    return;
+  }
+  const run = data.run || {};
+  const api_response = data.api_response || {};
+  const detail = api_response.detail || {};
+  const codes = api_response.codes || run.snapshot?.codes || detail.codes || [];
+  const docType = (data.events || [])
+    .filter((e) => e.event_type === "document_type")
+    .at(-1)?.payload;
+  const fields = data.fields || {};
+  const fieldRows = Object.entries(fields)
+    .map(
+      ([nm, rec]) =>
+        `<tr><td>${esc(human(nm))}</td><td>${esc(rec.raw_value ?? "—")}</td><td>${esc(rec.status)}</td><td>${esc(
+          Object.entries(rec.checks || {})
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ") || "—",
+        )}</td></tr>`,
+    )
+    .join("");
+  const events = (data.events || [])
+    .map(
+      (e) =>
+        `<div class="activity-row"><time>${esc(e.stage || "")}</time><p>${esc(activityText(e))}</p></div>`,
+    )
+    .join("");
+  const badgeFor = { approved: "approved", held: "held", rejected: "rejected" };
+  const state = run.run_status === "failed" ? "failed" : run.disposition || "queued";
+  openModal({
+    title: "Saved result",
+    subtitle: `${fixture} · uploaded as ${data.uploaded_as || fixture} · recorded run ${run.run_id || "—"}`,
+    body: `<div class="saved-result"><div class="saved-head"><span class="badge ${esc(badgeFor[state] || state)}">${esc(
+      { approved: "Approved", held: "Needs review", rejected: "Rejected", failed: "Couldn’t process" }[state] || state,
+    )}</span>${codes.length ? codes.map((c) => `<span class="code-chip">${esc(c)}</span>`).join("") : ""}</div>${
+      api_response.explanation || detail.error
+        ? `<p class="saved-explanation">${esc(api_response.explanation || detail.error)}</p>`
+        : ""
+    }<dl class="saved-facts"><div><dt>HTTP status</dt><dd>${esc(String(data.http_status ?? "—"))}</dd></div><div><dt>Route</dt><dd>${esc(api_response.route || "—")}</dd></div><div><dt>Run status</dt><dd>${esc(run.run_status || "—")}</dd></div><div><dt>Failure reason</dt><dd>${esc(run.failure_reason || "—")}</dd></div><div><dt>Posted to the ledger</dt><dd>${api_response.posted ? "yes" : "no"}</dd></div><div><dt>Model calls</dt><dd>${esc(String(data.model_calls ?? "—"))}</dd></div><div><dt>Pages</dt><dd>${esc(String((data.events || []).find((e) => e.event_type === "classified")?.payload?.pages ?? "—"))}</dd></div></dl>${
+      docType
+        ? `<h3>Document type</h3><p class="saved-doctype"><b>${esc(docType.label || docType.kind)}</b>${docType.forced ? " (read as an invoice on the reviewer’s instruction)" : ""}</p><ul>${(docType.reasons || []).map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`
+        : ""
+    }${
+      fieldRows
+        ? `<h3>What the reader returned</h3><div class="edge-table-wrap"><table class="edge-table"><thead><tr><th>Field</th><th>Value read</th><th>Status</th><th>Code checks</th></tr></thead><tbody>${fieldRows}</tbody></table></div>`
+        : '<h3>What the reader returned</h3><p class="muted">Nothing — no field revision was saved, so there is no review form to fill in.</p>'
+    }${events ? `<h3>Activity recorded for this run</h3>${events}` : ""}</div>`,
+  });
+}
+async function edgeCases(generation) {
+  const data = await api("/api/edge-cases");
+  if (generation !== state.generation) return;
+  const L = data.limits;
+  const cases = data.groups.flatMap((g) => g.cases);
+  const total = cases.length;
+  const handled = cases.filter((c) => c.status === "handled").length;
+  const verdicts = {};
+  for (const c of cases) {
+    const v = c.probe?.verdict || "skipped";
+    verdicts[v] = (verdicts[v] || 0) + 1;
+  }
+  const probe = data.probe || {};
+  const chip = (c) =>
+    c.status === "handled"
+      ? '<span class="badge approved">Handled</span>'
+      : '<span class="badge held">Known limitation</span>';
+  $("#main").innerHTML =
+    header(
+      "Edge cases: faulty and non-invoice PDFs",
+      "Everything we check before a document reaches the review desk, what happens when a check fails, and what happened when we last ran each case.",
+    ) +
+    `<div class="edge-content"><section class="card edge-intro"><div class="edge-stats"><div><strong>${total}</strong><span>cases catalogued</span></div><div><strong>${handled}</strong><span>detected automatically</span></div><div><strong>${verdicts.confirmed || 0}</strong><span>verified by running them</span></div><div><strong>${total - handled}</strong><span>documented limitations</span></div></div><p>Rule of thumb: a file that is not an invoice never opens a review form. It is refused at upload, marked <b>Couldn’t process</b> with the exact reason, or <b>Rejected</b> as an unsupported document, all before any model call and with no financial effect.</p>${probe.generated_at ? `<p class="probe-banner"><b>Verified ${esc(dateTime(probe.generated_at))}</b> against the live reader <code>${esc(probe.model || "")}</code>. Each case below was run for real: a fixture file was uploaded to a fresh workspace, and the route, reason codes, failure reason and number of model calls were read back from the run. Open any row’s saved result to see the decision, reason codes, document-type verdict, every field the reader returned and the full activity trail — read from the record, with nothing re-run. Everything is kept under <code>evidence/edge-cases/</code>.</p>` : '<p class="probe-banner">No verification run recorded yet. Run <code>venv/bin/python tools/edge_case_probe.py</code> to fill in the Verified column.</p>'}<dl class="edge-limits"><div><dt>Upload size</dt><dd>${L.max_upload_mb} MB</dd></div><div><dt>Pages</dt><dd>${L.max_pages}</dd></div><div><dt>Scan threshold</dt><dd>&lt; ${L.scan_text_threshold_chars} chars of text</dd></div><div><dt>Garbled text</dt><dd>&lt; ${Math.round(L.garbled_alnum_ratio * 100)}% letters/digits</dd></div><div><dt>Model budget</dt><dd>${L.model_calls_per_document} calls · ${L.model_retries_per_document} retries · ${L.model_wall_seconds}s · ${L.model_token_cap.toLocaleString()} tokens</dd></div></dl></section>${data.groups
+      .map(
+        (g) => `<section class="card edge-group" id="edge-${esc(g.id)}"><h2>${esc(g.title)}</h2><p class="edge-summary">${esc(g.summary)}</p><div class="edge-table-wrap"><table class="edge-table"><thead><tr><th>Case</th><th>How it is detected</th><th>What happens</th><th>What you see / do next</th><th>Status</th><th>Verified</th></tr></thead><tbody>${g.cases
+          .map(
+            (c) => `<tr id="edge-${esc(c.id)}"><td><b>${esc(c.title)}</b></td><td>${esc(c.detection)}</td><td>${esc(c.outcome)}</td><td>${esc(c.next_step)}</td><td>${chip(c)}${c.test ? `<small class="edge-test" title="Automated test covering this case">${esc(c.test)}</small>` : ""}</td><td>${probeCell(c.probe)}</td></tr>`,
+          )
+          .join("")}</tbody></table></div></section>`,
+      )
+      .join("")}<a href="#invoices">← Back to invoices</a></div>`;
+}
 function help() {
   $("#main").innerHTML =
     header(
       "A simpler way to review invoices",
       "Upload, check, and act only where your help is needed.",
     ) +
-    `<div class="help-content"><section class="card"><h2>Your invoice journey</h2><ol><li><b>Upload a PDF.</b> We read the details and check the supplier, purchase order and amounts.</li><li><b>See the result.</b> Eligible invoices are approved automatically. Invoices that need your help appear under Needs attention.</li><li><b>Resolve the highlighted items.</b> Compare the details with the original, save corrections, and select a purchase order. For scanned invoices, Save & confirm each value you have compared with the image.</li><li><b>Check again.</b> All rules run again. Passing invoices are approved; anything unresolved gets a next step.</li></ol><h3>What the statuses mean</h3><p><b>Approved:</b> The amount was added to the approved purchase order balance. An exception label means a permitted small budget overage.</p><p><b>Needs review:</b> Nothing was approved. Open the invoice for corrections or next steps.</p><p><b>Rejected:</b> No amount was added. The invoice explains why, including duplicates and blocked suppliers.</p><p><b>Couldn’t process:</b> The document could not be read. Retry an interrupted reading or upload a replacement PDF.</p></section><section class="card"><h2>If you can’t resolve an invoice</h2><p>Keep it pending while you ask your supplier or procurement team for the missing information. Reject it with a reason if it should not proceed.</p><p>Anything that needs master data — a new or blocked supplier, a missing or too-small purchase order — is sent to procurement from the task itself and answered there. A same-day match can be confirmed as a separate invoice with a recorded reason; exact duplicates are final. The demo never reverses an approval or sends a payment.</p><p>Each invoice keeps its original document, earlier attempts, decision explanation and technical evidence under <b>Decision details & activity</b>.</p></section><section class="card"><h2>Roles</h2><p><b>Invoice reviewer</b> uploads, corrects, approves and rejects. <b>Procurement admin</b> manages suppliers and purchase orders and works the procurement queue, but cannot approve — the person who creates the budget is never the person who releases money against it. Every action is recorded with the role that performed it, and the server enforces the split on every request.</p><p>Use <b>Switch role</b> in the top bar to sign in as the other role.</p></section>${isAdmin() ? '<section class="card"><h2>Demo settings</h2><p>Reset removes all invoices, reviews and approvals in this demo and restores the example suppliers and purchase orders. This cannot be undone.</p><button class="danger" data-action="reset">Reset demo workspace</button><div id="reset-error"></div></section>' : ""}<a href="#invoices">← Back to invoices</a></div>`;
+    `<div class="help-content"><section class="card"><h2>Your invoice journey</h2><ol><li><b>Upload a PDF.</b> We read the details and check the supplier, purchase order and amounts.</li><li><b>See the result.</b> Eligible invoices are approved automatically. Invoices that need your help appear under Needs attention.</li><li><b>Resolve the highlighted items.</b> Compare the details with the original, save corrections, and select a purchase order. AI independently verifies scan readings where possible. Confirm only the values that remain uncertain.</li><li><b>Check again.</b> All rules run again. Passing invoices are approved; anything unresolved gets a next step.</li></ol><h3>What the statuses mean</h3><p><b>Approved:</b> The amount was added to the approved purchase order balance. An exception label means a permitted small budget overage.</p><p><b>Needs review:</b> Nothing was approved. Open the invoice for corrections or next steps.</p><p><b>Rejected:</b> No amount was added. The invoice explains why, including duplicates and blocked suppliers.</p><p><b>Couldn’t process:</b> The document could not be read. Retry an interrupted reading or upload a replacement PDF.</p></section><section class="card"><h2>If you can’t resolve an invoice</h2><p>Keep it pending while you ask your supplier or procurement team for the missing information. Reject it with a reason if it should not proceed.</p><p>Anything that needs master data — a new or blocked supplier, a missing or too-small purchase order — is automatically sent to procurement when a verified supplier or PO is missing. Additional requests can be raised from the invoice. A same-day match can be confirmed as a separate invoice with a recorded reason; exact duplicates are final. The demo never reverses an approval or sends a payment.</p><p>Each invoice keeps its original document, earlier attempts, decision explanation and technical evidence under <b>Decision details & activity</b>.</p></section><section class="card"><h2>Roles</h2><p><b>Invoice reviewer</b> uploads, corrects, approves and rejects. <b>Procurement admin</b> manages suppliers and purchase orders and works the procurement queue, but cannot approve — the person who creates the budget is never the person who releases money against it. Every action is recorded with the role that performed it, and the server enforces the split on every request.</p><p>There is no sign-in: use <b>Switch to procurement</b> / <b>Switch to invoice review</b> in the top bar to change role. The server still enforces what each role may do.</p></section>${isAdmin() ? '<section class="card"><h2>Demo settings</h2><p>Reset removes all invoices, reviews and approvals in this demo and restores the example suppliers and purchase orders. This cannot be undone.</p><button class="danger" data-action="reset">Reset demo workspace</button><div id="reset-error"></div></section>' : ""}<a href="#invoices">← Back to invoices</a></div>`;
 }
 async function withAction(container, fn) {
   if (state.busy) return;
@@ -2107,29 +2702,6 @@ async function submitForm(form) {
       );
       refreshQueueCount();
       await route();
-    } else if (type === "login") {
-      const result = await api("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: body.code.trim() }),
-      });
-      try {
-        localStorage.setItem(TOKEN_KEY, result.token);
-      } catch (e) {}
-      state.user = {
-        role: result.role,
-        label: result.label,
-        actor: result.actor,
-      };
-      applyRoleUI();
-      notice(`Signed in as ${result.label.toLowerCase()}.`);
-      refreshQueueCount();
-      state.filter = "all";
-      state.search = "";
-      state.requestFilter = "open";
-      const home = isAdmin() ? "#queue" : "#invoices";
-      if (location.hash === home) await route();
-      else location.hash = home;
     } else if (type === "amend-po") {
       const id = form.dataset.id;
       await api(`/api/pos/${encodeURIComponent(id)}`, {
@@ -2211,9 +2783,12 @@ async function handleAction(action, button) {
       ))
     )
       return;
-    signOut();
-    location.hash = "";
-    await renderLanding();
+    await switchRole(isAdmin() ? "reviewer" : "admin");
+    return;
+  }
+  if (action === "retry-session") {
+    await ensureSession();
+    await route();
     return;
   }
   if (action === "amend-po") {
@@ -2318,6 +2893,30 @@ async function handleAction(action, button) {
     $("#file-input").click();
     return;
   }
+  if (action === "sample-select-all") {
+    const boxes = button.closest("form").querySelectorAll("input[name=names]");
+    const all = [...boxes].some((b) => b.checked);
+    boxes.forEach((b, i) => (b.checked = !all && i < 25));
+    updateSampleSelection(button.closest("form"));
+    button.textContent = all ? (boxes.length > 25 ? "Select first 25" : "Select all") : "Clear selection";
+    return;
+  }
+  if (action === "cloud-import") {
+    cloudImportModal();
+    return;
+  }
+  if (action === "browse-source") {
+    browseSource(button.dataset.kind);
+    return;
+  }
+  if (action === "reset-folder") {
+    saveFolderSettings(button.closest("form"), { reset: true });
+    return;
+  }
+  if (action === "import-folder-all") {
+    importFolderAll();
+    return;
+  }
   if (action === "inbox") {
     location.hash = "invoices";
     return;
@@ -2348,11 +2947,16 @@ async function handleAction(action, button) {
     await renderDocument(state.detail.run_id, state.generation);
     return;
   }
-  if (action === "retry-reading") {
+  if (action === "open-result") {
+    await openResult(button.dataset.result, button.dataset.fixture);
+    return;
+  }
+  if (action === "retry-reading" || action === "read-as-invoice") {
     const id = state.detail.run_id;
+    const query = action === "read-as-invoice" ? "?as_invoice=true" : "";
     beginLive(state.detail.filename, () =>
       post(
-        `/api/runs/${encodeURIComponent(id)}/retry`,
+        `/api/runs/${encodeURIComponent(id)}/retry${query}`,
         {},
         { timeout: 180000 },
       ),
@@ -2495,10 +3099,25 @@ document.addEventListener("submit", (e) => {
   e.preventDefault();
   const submitter = e.submitter;
   if (submitter?.name === "outcome") form.dataset.outcome = submitter.value;
+  if (form.dataset.form === "source-import") {
+    submitSourceImport(form);
+    return;
+  }
+  if (form.dataset.form === "folder-settings") {
+    saveFolderSettings(form);
+    return;
+  }
+  if (form.dataset.form === "sample-batch") {
+    runSamplesBatch(
+      [...form.querySelectorAll("input[name=names]:checked")].map((i) => i.value),
+    );
+    return;
+  }
   submitForm(form);
 });
 document.addEventListener("change", (e) => {
   const sel = e.target;
+  if (sel.matches('[data-form="sample-batch"] input[name=names]')) { updateSampleSelection(sel.closest("form")); return; }
   if (sel instanceof HTMLSelectElement && sel.hasAttribute("data-request-kind")) {
     sel.closest("form").querySelectorAll("[data-when]").forEach((el) => {
       const on = el.dataset.when === sel.value;
@@ -2562,6 +3181,10 @@ document.addEventListener("click", async (e) => {
   }
   if (button?.dataset.sample) {
     const sample = button.dataset.sample;
+    if (isZipName(sample)) {
+      runSamplesBatch([sample]);
+      return;
+    }
     beginLive(sample, () =>
       post(
         `/api/samples/${encodeURIComponent(sample)}/run`,
@@ -2628,7 +3251,7 @@ document.addEventListener("click", async (e) => {
   }
 });
 $("#file-input").addEventListener("change", (e) => {
-  upload(e.target.files[0]);
+  upload(e.target.files);
   e.target.value = "";
 });
 document.addEventListener("dragover", (e) => {
@@ -2646,11 +3269,7 @@ document.addEventListener("drop", (e) => {
   if (zone) {
     e.preventDefault();
     zone.classList.remove("dragover");
-    if (e.dataTransfer.files.length !== 1) {
-      intakeError("Choose one invoice PDF at a time.");
-      return;
-    }
-    upload(e.dataTransfer.files[0]);
+    upload(e.dataTransfer.files);
   }
 });
 window.addEventListener("beforeunload", (e) => {
@@ -2660,19 +3279,20 @@ window.addEventListener("beforeunload", (e) => {
   }
 });
 window.addEventListener("hashchange", route);
+window.addEventListener("popstate", () => { if (!location.hash) route(); });
 applyTheme(document.documentElement.dataset.theme || "light", false);
 ensureSession().then(() => {
   route();
   refreshQueueCount();
 });
 setInterval(async () => {
-  if (!state.user || state.route !== "invoices" || state.busy) return;
+  if (!state.user || !["invoices", "dashboard"].includes(state.route) || state.busy) return;
   try {
     const [runs, tickets] = await Promise.all([
       api("/api/runs"),
       api("/api/tickets?status=all"),
     ]);
-    if (state.route === "invoices" && $("#invoice-table")) {
+    if (["invoices", "dashboard"].includes(state.route) && $("#invoice-table")) {
       if (
         JSON.stringify(state.runs) !== JSON.stringify(runs) ||
         JSON.stringify(state.allTickets) !== JSON.stringify(tickets)

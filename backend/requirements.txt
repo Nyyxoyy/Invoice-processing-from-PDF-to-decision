@@ -6,3 +6,6 @@ google-genai>=1.0
 pydantic>=2.8
 python-multipart>=0.0.9
 pytest>=8.0
+google-cloud-storage>=2.16
+google-api-python-client>=2.130
+google-auth>=2.29

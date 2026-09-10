@@ -1,0 +1,651 @@
+{
+  "case": "fingerprint",
+  "fixture": "fingerprint-a.pdf",
+  "uploaded_as": "fingerprint-a.pdf",
+  "http_status": 200,
+  "model_calls": 1,
+  "observed": "HTTP 200 · AUTO_APPROVE · type “invoice” · 1 model call · posted",
+  "api_response": {
+    "run_id": "run_10461d2daa8e",
+    "invoice_id": "inv_0935c97abcb4",
+    "route": "AUTO_APPROVE",
+    "codes": [],
+    "explanation": "Approved automatically. All gates passed. Cumulative billing USD 1,000.00 against a USD 5,000.00 PO; overage USD 0.00, allowance USD 100.00 (exception limit USD 250.00). Amount added to the approved ledger. Next: none.",
+    "posted": true
+  },
+  "run": {
+    "run_id": "run_10461d2daa8e",
+    "document_id": "doc_74e2ee3f02cb",
+    "invoice_id": "inv_0935c97abcb4",
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "approved",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:49:53",
+    "finished_at": "2026-09-10 21:50:00",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "fingerprint-a.pdf",
+    "confidence": {
+      "score": 100,
+      "band": "high",
+      "reasons": [
+        "6/6 required fields verified",
+        "Supplier matched",
+        "Purchase order matched",
+        "Totals reconcile"
+      ],
+      "supplier_match": true,
+      "po_match": true,
+      "method": "evidence-v1",
+      "scored_at": "2026-09-10 21:50:00"
+    },
+    "snapshot": {
+      "policy_version": 1,
+      "registry_version": "bundled-2026-09-09",
+      "rounding_policy": {
+        "quantize_mode": "ROUND_HALF_UP",
+        "per_line_bound_minor": 1,
+        "reconciliation_local_bound_minor": 1,
+        "document_residual_cap_minor": 5
+      },
+      "currency": "USD",
+      "consumed_A_minor": 0,
+      "budget": {
+        "base_minor": 500000,
+        "consumed_minor": 0,
+        "invoice_minor": 100000,
+        "cumulative_minor": 100000,
+        "overage_minor": 0,
+        "t_primary_minor": 10000,
+        "t_exception_minor": 25000,
+        "currency": "USD"
+      },
+      "codes": []
+    }
+  },
+  "fields": {
+    "supplier_name": {
+      "field": "supplier_name",
+      "status": "selected",
+      "raw_value": "Initech Services",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b0"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "buyer_name": {
+      "field": "buyer_name",
+      "status": "selected",
+      "raw_value": "Acme Corporation",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b4"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "invoice_number": {
+      "field": "invoice_number",
+      "status": "selected",
+      "raw_value": "IT-1",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b1"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "invoice_date": {
+      "field": "invoice_date",
+      "status": "selected",
+      "raw_value": "2026-08-28",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b2"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "due_date": {
+      "field": "due_date",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "currency": {
+      "field": "currency",
+      "status": "selected",
+      "raw_value": "USD",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b5"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "po_reference": {
+      "field": "po_reference",
+      "status": "selected",
+      "raw_value": "PO-1003",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b3"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "subtotal_net": {
+      "field": "subtotal_net",
+      "status": "selected",
+      "raw_value": "$920.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b6"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "tax_total": {
+      "field": "tax_total",
+      "status": "selected",
+      "raw_value": "$80.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b7"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "shipping_total": {
+      "field": "shipping_total",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "invoice_gross_total": {
+      "field": "invoice_gross_total",
+      "status": "selected",
+      "raw_value": "$1,000.00",
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": "p1.b8"
+      },
+      "checks": {
+        "source_match": "pass",
+        "role_check": "pass",
+        "normalization": "pass",
+        "ambiguity": "none"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    },
+    "amount_due": {
+      "field": "amount_due",
+      "status": "missing",
+      "raw_value": null,
+      "read_method": "llm_text",
+      "evidence": {
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "block_id": null
+      },
+      "checks": {
+        "source_match": "not_evaluated",
+        "role_check": "not_evaluated",
+        "normalization": "not_evaluated",
+        "ambiguity": "missing"
+      },
+      "review_status": "not_reviewed",
+      "problem": null,
+      "attestable": false
+    }
+  },
+  "diagnosis": {
+    "codes": [],
+    "open_codes": [],
+    "items": [],
+    "field_problems": {},
+    "vendor_resolved": true
+  },
+  "context": {
+    "any_scanned": false,
+    "currency": {
+      "code": "USD",
+      "source": "field"
+    },
+    "po_references": [
+      "PO-1003"
+    ]
+  },
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:49:53",
+      "stage": "INGEST",
+      "event_type": "classified",
+      "payload": {
+        "pages": 1,
+        "page_kinds": [
+          "text"
+        ],
+        "garbled_pages": [],
+        "extraction_revision_id": "xr_4ab318e1eb6e",
+        "blocks": 9
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:49:53",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "invoice",
+        "invoice_like": true,
+        "label": "invoice",
+        "reasons": [
+          "Invoice wording and monetary amounts are present."
+        ],
+        "signals": {
+          "invoice_words": 2,
+          "total_words": 1,
+          "tax_words": 1,
+          "billing_words": 1,
+          "amounts": 3,
+          "amounts_any": 3,
+          "monetary": {
+            "decimal": 3,
+            "currency_adjacent": 3,
+            "grouped_integer": 0
+          },
+          "currency_marks": 4,
+          "dates": 1,
+          "invoice_numbers": [
+            "IT-1"
+          ],
+          "chars": 173,
+          "blank_pages": [],
+          "page_kinds": [
+            "text"
+          ]
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:50:00",
+      "stage": "EXTRACT",
+      "event_type": "attempts",
+      "payload": {
+        "attempts": [
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": true,
+            "seconds": 2.45,
+            "input_tokens": 299,
+            "output_tokens": 629
+          }
+        ]
+      }
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-10 21:50:00",
+      "stage": "EXTRACT",
+      "event_type": "fields",
+      "payload": {
+        "supplier_name": {
+          "status": "selected",
+          "raw": "Initech Services",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b0"
+          }
+        },
+        "buyer_name": {
+          "status": "selected",
+          "raw": "Acme Corporation",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b4"
+          }
+        },
+        "invoice_number": {
+          "status": "selected",
+          "raw": "IT-1",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b1"
+          }
+        },
+        "invoice_date": {
+          "status": "selected",
+          "raw": "2026-08-28",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b2"
+          }
+        },
+        "due_date": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": null
+          }
+        },
+        "currency": {
+          "status": "selected",
+          "raw": "USD",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b5"
+          }
+        },
+        "po_reference": {
+          "status": "selected",
+          "raw": "PO-1003",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b3"
+          }
+        },
+        "subtotal_net": {
+          "status": "selected",
+          "raw": "$920.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b6"
+          }
+        },
+        "tax_total": {
+          "status": "selected",
+          "raw": "$80.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b7"
+          }
+        },
+        "shipping_total": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": null
+          }
+        },
+        "invoice_gross_total": {
+          "status": "selected",
+          "raw": "$1,000.00",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "pass",
+            "normalization": "pass",
+            "ambiguity": "none"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b8"
+          }
+        },
+        "amount_due": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_evaluated",
+            "role_check": "not_evaluated",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_text",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "ts": "2026-09-10 21:50:00",
+      "stage": "VALIDATE",
+      "event_type": "gates",
+      "payload": {
+        "required_fields_ok": true,
+        "arithmetic_ok": true,
+        "reconciliation": "920.00 + 80.00 = 1000.00",
+        "structure_supported": true,
+        "scan_gate": false,
+        "ambiguous_date": false,
+        "currency": {
+          "code": "USD",
+          "source": "field",
+          "evidence": {
+            "extraction_revision_id": "xr_4ab318e1eb6e",
+            "block_id": "p1.b5"
+          }
+        },
+        "po_references": [
+          "PO-1003"
+        ]
+      }
+    },
+    {
+      "seq": 6,
+      "ts": "2026-09-10 21:50:00",
+      "stage": "MATCH",
+      "event_type": "rule_evaluated",
+      "payload": {
+        "rule": "budget_check[v1]",
+        "A": 0,
+        "I": 100000,
+        "C": 100000,
+        "B": 500000,
+        "D": 0,
+        "T_primary": 10000,
+        "T_exception": 25000
+      }
+    },
+    {
+      "seq": 7,
+      "ts": "2026-09-10 21:50:00",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "AUTO_APPROVE",
+        "codes": [],
+        "explanation": "Approved automatically. All gates passed. Cumulative billing USD 1,000.00 against a USD 5,000.00 PO; overage USD 0.00, allowance USD 100.00 (exception limit USD 250.00). Amount added to the approved ledger. Next: none.",
+        "posted": true
+      }
+    },
+    {
+      "seq": 8,
+      "ts": "2026-09-10 21:50:00",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": 100,
+        "band": "high",
+        "reasons": [
+          "6/6 required fields verified",
+          "Supplier matched",
+          "Purchase order matched",
+          "Totals reconcile"
+        ],
+        "supplier_match": true,
+        "po_match": true,
+        "method": "evidence-v1",
+        "scored_at": "2026-09-10 21:50:00"
+      }
+    }
+  ]
+}

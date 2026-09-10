@@ -6,6 +6,9 @@
     <meta name="theme-color" content="#f7f8fa" />
     <title>Invoice desk</title>
     <script>
+      // Select the onboarding shell before first paint, including old bookmarks.
+      if (["#home", "#dataset"].includes(location.hash) || (!location.hash && location.pathname.startsWith("/onboarding")))
+        document.documentElement.classList.add("onboarding-shell");
       // Apply the saved theme before first paint so there is no light flash.
       (function () {
         try {
@@ -30,6 +33,7 @@
       >
       <div class="workspace-label" id="workspace-label">WORKSPACE</div>
       <nav aria-label="Main navigation">
+        <a href="#dashboard" data-nav="dashboard"><span aria-hidden="true">◫</span>AI dashboard</a>
         <a href="#invoices" data-nav="invoices"
           ><span aria-hidden="true">▤</span
           ><span id="invoice-nav-label">Invoice reviews</span
@@ -43,6 +47,9 @@
         >
         <a href="#vendors" data-nav="vendors"
           ><span aria-hidden="true">◇</span>Suppliers</a
+        >
+        <a href="#edge-cases" data-nav="edge-cases"
+          ><span aria-hidden="true">⚠</span>Edge cases</a
         >
         <a href="#queue" data-nav="queue" class="admin-only" hidden
           ><span aria-hidden="true">◈</span>Requests<span
@@ -70,7 +77,7 @@
             class="theme-toggle"
             type="button"
             data-action="switch-role"
-            title="Sign out and choose another role"
+            title="Switch between invoice review and procurement"
             hidden
           >
             Switch role
@@ -94,9 +101,10 @@
     <input
       id="file-input"
       type="file"
-      accept=".pdf,application/pdf"
+      accept=".pdf,.zip,application/pdf,application/zip"
+      multiple
       hidden
-      aria-label="Choose invoice PDF"
+      aria-label="Choose invoice PDFs or a ZIP archive"
     />
     <div id="notice" role="status" aria-live="polite" hidden></div>
     <dialog id="app-modal" class="app-modal" aria-labelledby="modal-title">

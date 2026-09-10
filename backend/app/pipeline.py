@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import ledger
 from .db import alias_list
+from .doctype import after_extraction, classify_document
 from .evidence import prepare_evidence, render_page_png
 from .extractor import (BudgetExceeded, CallBudget, extract_native, extract_scan, transcribe_page,
                         verify_selection, verify_transcription)
@@ -118,8 +119,25 @@ def resolve_vendor(conn, supplier_name: str | None) -> sqlite3.Row | None:
     return None
 
 
-def process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
-                     policy: Policy, data_dir: str, retry_of: str | None = None) -> CommitResult:
+def _finalize_not_invoice(conn, run_id: str, verdict, policy: Policy) -> CommitResult:
+    """The document is not an invoice: record what was found and why, then a
+    terminal REJECT (UNSUPPORTED_DOCUMENT_TYPE). No field revision is saved,
+    so the review desk has nothing to ask for."""
+    _emit(conn, run_id, "INGEST", "document_type", verdict.to_dict())
+    return _finalize_no_identity(conn, run_id, ResolverInput(document_type_supported=False), policy)
+
+
+def _is_rejected_as_not_invoice(conn, run_id: str) -> bool:
+    row = conn.execute("SELECT disposition, snapshot_json FROM runs WHERE run_id=?", (run_id,)).fetchone()
+    if not row or row["disposition"] != "rejected":
+        return False
+    codes = (json.loads(row["snapshot_json"] or "{}") or {}).get("codes") or []
+    return codes == [Code.UNSUPPORTED_DOCUMENT_TYPE.value]
+
+
+def _process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
+                     policy: Policy, data_dir: str, retry_of: str | None = None,
+                     as_invoice: bool = False) -> CommitResult:
     raw = Path(pdf_path).read_bytes()
     sha = hashlib.sha256(raw).hexdigest()
 
@@ -129,7 +147,11 @@ def process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
     if retry_of:
         prior = conn.execute('SELECT * FROM runs WHERE run_id=?', (retry_of,)).fetchone()
         exhausted = conn.execute("SELECT 1 FROM run_events WHERE run_id=? AND event_type='budget_exhausted'", (retry_of,)).fetchone()
-        if not prior or not existing_doc or prior['document_id'] != existing_doc['document_id'] or not (prior['run_status'] == 'failed' or exhausted):
+        not_invoice = _is_rejected_as_not_invoice(conn, retry_of)
+        if as_invoice and not not_invoice:
+            raise ValueError('Only a document rejected as "not an invoice" can be read as an invoice anyway.')
+        if not prior or not existing_doc or prior['document_id'] != existing_doc['document_id'] \
+                or not (prior['run_status'] == 'failed' or exhausted or (not_invoice and as_invoice)):
             raise ValueError('Only a failed reading can be retried. Open the invoice to review its result.')
         newer = conn.execute('SELECT 1 FROM runs WHERE parent_run_id=?', (retry_of,)).fetchone()
         posted = conn.execute("SELECT 1 FROM runs r JOIN ledger_events l ON l.run_id=r.run_id WHERE r.document_id=? AND l.kind='posting'", (prior['document_id'],)).fetchone()
@@ -160,11 +182,17 @@ def process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
     conn.execute("INSERT INTO runs (run_id, document_id, run_status, parent_run_id) VALUES (?, ?, 'running', ?)",
                  (run_id, document_id, retry_of))
 
+    if _needs_password(str(stored)):
+        _fail_run(conn, run_id, "encrypted: password required")
+        raise OperationalFailure(run_id, "the PDF is password-protected")
     try:
         rev = prepare_evidence(str(stored))
-    except Exception as e:  # corrupt/encrypted/unparseable PDF: explicit failed run
+    except Exception as e:  # corrupt/unparseable PDF: explicit failed run
         _fail_run(conn, run_id, f"parse_error: {type(e).__name__}")
         raise OperationalFailure(run_id, f"unreadable PDF ({type(e).__name__})") from e
+    if rev.pages == 0:
+        _fail_run(conn, run_id, "no_pages: the PDF has no pages")
+        raise OperationalFailure(run_id, "the PDF has no pages")
     if rev.pages > MAX_PAGES:
         _fail_run(conn, run_id, f"page_limit: {rev.pages} > {MAX_PAGES}")
         raise OperationalFailure(run_id, f"page limit exceeded ({rev.pages} pages)")
@@ -172,16 +200,33 @@ def process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
     (Path(data_dir) / "evidence").mkdir(exist_ok=True)
     (Path(data_dir) / "evidence" / f"{rev.extraction_revision_id}.json").write_text(rev.to_json())
     _emit(conn, run_id, "INGEST", "classified",
-          {"pages": rev.pages, "page_kinds": list(rev.page_kinds),
+          {"pages": rev.pages, "page_kinds": list(rev.page_kinds), "garbled_pages": list(rev.garbled_pages),
            "extraction_revision_id": rev.extraction_revision_id, "blocks": len(rev.blocks)})
+
+    # ---- DOCUMENT TYPE gate (code only, before any model call) ----
+    page_texts = ["\n".join(b.text for b in rev.blocks if b.page == n) for n in range(1, rev.pages + 1)]
+    verdict = classify_document(str(stored), "\n".join(b.text for b in rev.blocks), rev.pages,
+                                rev.page_kinds, page_texts)
+    if as_invoice:
+        verdict.forced = True
+        verdict.invoice_like = True
+        verdict.reasons = ["The reviewer asked for this document to be read as an invoice."] + verdict.reasons
+    if not verdict.invoice_like:
+        return _finalize_not_invoice(conn, run_id, verdict, policy)
+    _emit(conn, run_id, "INGEST", "document_type", verdict.to_dict())
 
     # ---- EXTRACT ----
     budget = CallBudget()
     fields: dict[str, FieldRecord] = {}
+    page_text: str | None = None
     try:
         if any_scanned:
             page = rev.page_kinds.index("scanned") + 1
-            png = render_page_png(str(stored), page)
+            try:
+                png = render_page_png(str(stored), page)
+            except Exception as e:  # noqa: BLE001 — a page that cannot be rasterised is an explicit failure
+                _fail_run(conn, run_id, f"render_error: {type(e).__name__}")
+                raise OperationalFailure(run_id, f"page {page} could not be rendered ({type(e).__name__})") from e
             transcriptions = extract_scan(png, page, budget)
             try:
                 page_text = transcribe_page(png, page, budget)   # independent second reading
@@ -211,6 +256,12 @@ def process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
     _emit(conn, run_id, "EXTRACT", "fields",
           {f: {"status": r.status, "raw": r.raw_value, "checks": r.checks,
                "read_method": r.read_method, "evidence": r.evidence} for f, r in fields.items()})
+
+    # image-only document whose reading found nothing an invoice carries
+    if not as_invoice:
+        late = after_extraction(fields, any_scanned, page_text)
+        if late is not None:
+            return _finalize_not_invoice(conn, run_id, late, policy)
 
     # ---- VALIDATE ----
     from .review import save_revision
@@ -294,9 +345,28 @@ def process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
         gates=gates, policy=policy, invoice_date_iso=invoice_date_iso)
 
 
+def _needs_password(pdf_path: str) -> bool:
+    """User-password encryption: the file opens but nothing can be read."""
+    import fitz
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception:  # noqa: BLE001 — unparseable files are reported by prepare_evidence
+        return False
+    try:
+        return bool(doc.needs_pass)
+    finally:
+        doc.close()
+
+
 def startup_recovery(conn: sqlite3.Connection) -> int:
     """Mark stale in-progress work interrupted; retry is a new run."""
     cur = conn.execute(
         "UPDATE runs SET run_status='failed', failure_reason='interrupted', finished_at=datetime('now') "
         "WHERE run_status IN ('queued', 'running')")
     return cur.rowcount
+
+
+def process_document(conn, pdf_path, filename, policy, data_dir, retry_of=None, as_invoice=False):
+    from .automation import finish_automation
+    result = _process_document(conn, pdf_path, filename, policy, data_dir, retry_of, as_invoice)
+    return finish_automation(conn, result)

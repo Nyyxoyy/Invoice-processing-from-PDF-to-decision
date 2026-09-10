@@ -1,0 +1,201 @@
+{
+  "case": "budget",
+  "fixture": "budget-exhausted.pdf",
+  "uploaded_as": "budget-exhausted.pdf",
+  "http_status": 200,
+  "model_calls": 1,
+  "observed": "HTTP 200 · HOLD_REVIEW [VENDOR_UNKNOWN, NO_PO_MATCH, MISSING_FIELD] · type “invoice” · 1 model call · nothing posted · reader errors: extract: ConnectionError, extract: ConnectionError, extract: ConnectionError",
+  "api_response": {
+    "run_id": "run_328d8992b98c",
+    "invoice_id": null,
+    "route": "HOLD_REVIEW",
+    "codes": [
+      "VENDOR_UNKNOWN",
+      "NO_PO_MATCH",
+      "MISSING_FIELD"
+    ],
+    "explanation": "Held for review (VENDOR_UNKNOWN). No amount was added to the approved ledger. Next: a reviewer resolves the listed reasons, or the PO/policy is amended.",
+    "posted": false
+  },
+  "run": {
+    "run_id": "run_328d8992b98c",
+    "document_id": "doc_753bd6249c8e",
+    "invoice_id": null,
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "held",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:48:57",
+    "finished_at": "2026-09-10 21:49:02",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "budget-exhausted.pdf",
+    "confidence": {
+      "score": null,
+      "band": "unavailable",
+      "reasons": [
+        "No completed extraction available."
+      ]
+    },
+    "snapshot": {
+      "codes": [
+        "VENDOR_UNKNOWN",
+        "NO_PO_MATCH",
+        "MISSING_FIELD"
+      ]
+    }
+  },
+  "fields": null,
+  "diagnosis": null,
+  "context": null,
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:48:57",
+      "stage": "INGEST",
+      "event_type": "classified",
+      "payload": {
+        "pages": 1,
+        "page_kinds": [
+          "text"
+        ],
+        "garbled_pages": [],
+        "extraction_revision_id": "xr_ee8d42b51814",
+        "blocks": 9
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:48:57",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "invoice",
+        "invoice_like": true,
+        "label": "invoice",
+        "reasons": [
+          "Invoice wording and monetary amounts are present."
+        ],
+        "signals": {
+          "invoice_words": 2,
+          "total_words": 1,
+          "tax_words": 1,
+          "billing_words": 1,
+          "amounts": 3,
+          "amounts_any": 3,
+          "monetary": {
+            "decimal": 3,
+            "currency_adjacent": 3,
+            "grouped_integer": 0
+          },
+          "currency_marks": 4,
+          "dates": 1,
+          "invoice_numbers": [
+            "NW-2026-0142"
+          ],
+          "chars": 190,
+          "blank_pages": [],
+          "page_kinds": [
+            "text"
+          ]
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:49:02",
+      "stage": "EXTRACT",
+      "event_type": "budget_exhausted",
+      "payload": {
+        "error": "attempts exhausted: model endpoint unreachable (probe)",
+        "attempts": [
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": false,
+            "error": "ConnectionError",
+            "seconds": 0.0
+          },
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": false,
+            "error": "ConnectionError",
+            "seconds": 0.0
+          },
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": false,
+            "error": "ConnectionError",
+            "seconds": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-10 21:49:02",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "HOLD_REVIEW",
+        "codes": [
+          "VENDOR_UNKNOWN",
+          "NO_PO_MATCH",
+          "MISSING_FIELD"
+        ],
+        "explanation": "Held for review (VENDOR_UNKNOWN). No amount was added to the approved ledger. Next: a reviewer resolves the listed reasons, or the PO/policy is amended.",
+        "posted": false
+      }
+    },
+    {
+      "seq": 5,
+      "ts": "2026-09-10 21:49:02",
+      "stage": "EXTRACT",
+      "event_type": "attempts",
+      "payload": {
+        "attempts": [
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": false,
+            "error": "ConnectionError",
+            "seconds": 0.0
+          },
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": false,
+            "error": "ConnectionError",
+            "seconds": 0.0
+          },
+          {
+            "kind": "extract",
+            "model": "gemini-3.5-flash-lite",
+            "ok": false,
+            "error": "ConnectionError",
+            "seconds": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "seq": 6,
+      "ts": "2026-09-10 21:49:02",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": null,
+        "band": "unavailable",
+        "reasons": [
+          "No completed extraction available."
+        ]
+      }
+    }
+  ]
+}

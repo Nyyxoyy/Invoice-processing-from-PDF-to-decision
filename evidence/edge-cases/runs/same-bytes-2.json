@@ -1,0 +1,89 @@
+{
+  "case": "same-bytes",
+  "fixture": "duplicate-file.pdf",
+  "uploaded_as": "renamed-copy.pdf",
+  "http_status": 200,
+  "model_calls": 0,
+  "observed": "HTTP 200 · REJECT [DUP_FILE_HASH] · 0 model calls · nothing posted",
+  "api_response": {
+    "run_id": "run_48c3900859a5",
+    "invoice_id": null,
+    "route": "REJECT",
+    "codes": [
+      "DUP_FILE_HASH"
+    ],
+    "explanation": "Rejected (DUP_FILE_HASH). No amount was added to the approved ledger. Next: see the linked original invoice or contact the vendor.",
+    "posted": false
+  },
+  "run": {
+    "run_id": "run_48c3900859a5",
+    "document_id": "doc_89f65e456d10",
+    "invoice_id": null,
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "rejected",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:49:38",
+    "finished_at": "2026-09-10 21:49:38",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "duplicate-file.pdf",
+    "confidence": {
+      "score": null,
+      "band": "unavailable",
+      "reasons": [
+        "No completed extraction available."
+      ]
+    },
+    "snapshot": {
+      "codes": [
+        "DUP_FILE_HASH"
+      ]
+    }
+  },
+  "fields": null,
+  "diagnosis": null,
+  "context": null,
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:49:38",
+      "stage": "INGEST",
+      "event_type": "duplicate_submission",
+      "payload": {
+        "sha256": "c43a7ef1e197ae9c0c615e663c64b23deea94b6ca24386353c77cd51ff7d1bc5",
+        "original_invoice_id": "inv_7ca30fc0d388"
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:49:38",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "REJECT",
+        "codes": [
+          "DUP_FILE_HASH"
+        ],
+        "explanation": "Rejected (DUP_FILE_HASH). No amount was added to the approved ledger. Next: see the linked original invoice or contact the vendor.",
+        "posted": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:49:38",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": null,
+        "band": "unavailable",
+        "reasons": [
+          "No completed extraction available."
+        ]
+      }
+    }
+  ]
+}

@@ -1,11 +1,13 @@
 """Role-based access with server-side enforcement.
 
-Two roles, two access codes. In a deployed environment the codes come from
-environment variables (ADMIN_ACCESS_CODE, REVIEWER_ACCESS_CODE) and are
-compared in constant time; locally they fall back to demo defaults and the
-API advertises that it is in dev mode so the sign-in screen can show them.
-The bearer token IS the access code — a deliberate stand-in for SSO/OIDC:
-swap `resolve_user` for an identity-provider check and nothing else moves.
+Two roles, no passwords (2026-09-11). This is an open demo: the reviewer
+workspace opens directly and the top bar switches roles. The bearer token is
+the role name itself (`reviewer` / `admin`); the legacy demo codes are still
+accepted as aliases so older tabs and scripts keep working. What matters is
+that the SERVER decides what each role may do on every request — the split
+below is enforced here, not by which buttons the page shows. Swapping
+`resolve_user` for an identity-provider check (SSO/OIDC) is the only change
+needed to make this real.
 
   admin     procurement / administration: suppliers, purchase orders, the
             procurement queue, workspace reset. Reads invoices; never approves.
@@ -16,9 +18,6 @@ swap `resolve_user` for an identity-provider check and nothing else moves.
 """
 from __future__ import annotations
 
-import hmac
-import os
-
 from fastapi import HTTPException, Request
 
 ROLES = {
@@ -27,31 +26,18 @@ ROLES = {
     "reviewer": {"label": "Invoice reviewer", "actor": "reviewer@demo",
                  "description": "Uploads and reviews invoices, corrects details, approves or rejects. Cannot change suppliers or purchase orders."},
 }
-DEV_CODES = {"admin": "admin-demo", "reviewer": "reviewer-demo"}
-PUBLIC_PATHS = {"/", "/api/health", "/api/auth/config", "/api/auth/login"}
+# legacy demo codes, kept as aliases of the role they used to unlock
+ROLE_ALIASES = {"admin-demo": "admin", "reviewer-demo": "reviewer"}
+PUBLIC_PATHS = {"/", "/onboarding", "/onboarding/dataset", "/app", "/api/health", "/api/auth/config"}
 PUBLIC_PREFIXES = ("/static/",)
-
-
-def access_codes() -> tuple[dict[str, str], bool]:
-    """(role -> code, dev_mode). dev_mode is True when any code fell back."""
-    codes, dev = {}, False
-    for role in ROLES:
-        env = os.environ.get(f"{role.upper()}_ACCESS_CODE", "").strip()
-        if env:
-            codes[role] = env
-        else:
-            codes[role] = DEV_CODES[role]
-            dev = True
-    return codes, dev
 
 
 def resolve_user(token: str | None) -> dict | None:
     if not token:
         return None
-    codes, _ = access_codes()
-    for role, code in codes.items():
-        if hmac.compare_digest(token.encode(), code.encode()):
-            return {"role": role, **ROLES[role]}
+    role = ROLE_ALIASES.get(token, token).strip().lower()
+    if role in ROLES:
+        return {"role": role, **ROLES[role]}
     return None
 
 
@@ -60,10 +46,9 @@ def _bearer(request: Request) -> str | None:
     if header.lower().startswith("bearer "):
         return header[7:].strip()
     # <img src> cannot send headers: rendered page images only may pass the
-    # code as a query parameter. Kept to that one route so codes never end up
-    # in URLs for anything else.
+    # role as a query parameter (`role`; `access_code` kept for older tabs).
     if "/page/" in request.url.path and request.url.path.startswith("/api/runs/"):
-        return request.query_params.get("access_code") or None
+        return request.query_params.get("role") or request.query_params.get("access_code") or None
     return None
 
 
@@ -75,14 +60,14 @@ async def auth_gate(request: Request) -> None:
         return
     user = resolve_user(_bearer(request))
     if user is None:
-        raise HTTPException(401, "Sign in with an access code to continue.")
+        raise HTTPException(401, "Choose a role (reviewer or admin) to continue.")
     request.state.user = user
 
 
 def current_user(request: Request) -> dict:
     user = getattr(request.state, "user", None)
     if user is None:
-        raise HTTPException(401, "Sign in with an access code to continue.")
+        raise HTTPException(401, "Choose a role (reviewer or admin) to continue.")
     return user
 
 
@@ -96,5 +81,5 @@ def require_reviewer(request: Request) -> dict:
 def require_admin(request: Request) -> dict:
     user = current_user(request)
     if user["role"] != "admin":
-        raise HTTPException(403, "Only an administrator can do this. Ask procurement, or switch to the administrator role if you have its access code.")
+        raise HTTPException(403, "Only an administrator can do this. Switch to the procurement role in the top bar.")
     return user

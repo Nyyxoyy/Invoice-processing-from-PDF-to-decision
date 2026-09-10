@@ -127,6 +127,12 @@ def resolve(inp: ResolverInput, policy: Policy) -> Decision:
     if inp.duplicate_of_posted:
         return Decision(Route.REJECT, (Code.DUP_INVOICE_NO,), inp.budget)
 
+    # Not an invoice at all (blank, a quote, a purchase order, a résumé...):
+    # terminal for the submission, nothing to review, reviewer may override
+    # by re-reading the document as an invoice.
+    if not inp.document_type_supported:
+        return Decision(Route.REJECT, (Code.UNSUPPORTED_DOCUMENT_TYPE,), inp.budget)
+
     # Hard reject requires a reliably identified vendor.
     if inp.vendor_resolved and inp.vendor_blocked:
         return Decision(Route.REJECT, (Code.VENDOR_BLOCKED,), inp.budget)
@@ -135,8 +141,6 @@ def resolve(inp: ResolverInput, policy: Policy) -> Decision:
     holds: list[Code] = []
     if inp.content_conflict:
         holds.append(Code.CONTENT_CONFLICT)
-    if not inp.document_type_supported:
-        holds.append(Code.UNSUPPORTED_DOCUMENT_TYPE)
     if not inp.structure_supported:
         holds.append(Code.UNSUPPORTED_AMOUNT_STRUCTURE)
     if inp.vendor_resolved is None or inp.vendor_resolved is False:
@@ -228,6 +232,9 @@ def explain(decision: Decision) -> str:
             + " Next: a reviewer resolves the listed reasons, or the PO/policy is amended."
         )
     primary = decision.codes[0].value if decision.codes else "REJECT"
+    if Code.UNSUPPORTED_DOCUMENT_TYPE in decision.codes:
+        return ("Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was "
+                "read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.")
     return (
         f"Rejected ({primary})."
         + budget_line

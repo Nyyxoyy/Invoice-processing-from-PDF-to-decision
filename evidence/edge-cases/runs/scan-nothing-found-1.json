@@ -1,0 +1,357 @@
+{
+  "case": "scan-nothing-found",
+  "fixture": "scan-not-an-invoice.pdf",
+  "uploaded_as": "scan-not-an-invoice.pdf",
+  "http_status": 200,
+  "model_calls": 2,
+  "observed": "HTTP 200 · REJECT [UNSUPPORTED_DOCUMENT_TYPE] · type “not an invoice” · 2 model calls · nothing posted",
+  "api_response": {
+    "run_id": "run_09fe3954b318",
+    "invoice_id": null,
+    "route": "REJECT",
+    "codes": [
+      "UNSUPPORTED_DOCUMENT_TYPE"
+    ],
+    "explanation": "Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.",
+    "posted": false
+  },
+  "run": {
+    "run_id": "run_09fe3954b318",
+    "document_id": "doc_a8548d0610c3",
+    "invoice_id": null,
+    "run_status": "completed",
+    "failure_reason": null,
+    "disposition": "rejected",
+    "decision_mode": "automatic",
+    "policy_version": 1,
+    "created_at": "2026-09-10 21:47:42",
+    "finished_at": "2026-09-10 21:47:55",
+    "kind": "intake",
+    "parent_run_id": null,
+    "actor": null,
+    "idempotency_key": null,
+    "filename": "scan-not-an-invoice.pdf",
+    "confidence": {
+      "score": null,
+      "band": "unavailable",
+      "reasons": [
+        "No completed extraction available."
+      ]
+    },
+    "snapshot": {
+      "codes": [
+        "UNSUPPORTED_DOCUMENT_TYPE"
+      ]
+    }
+  },
+  "fields": null,
+  "diagnosis": null,
+  "context": null,
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "INGEST",
+      "event_type": "classified",
+      "payload": {
+        "pages": 1,
+        "page_kinds": [
+          "scanned"
+        ],
+        "garbled_pages": [],
+        "extraction_revision_id": "xr_9521f29d46d5",
+        "blocks": 0
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-09-10 21:47:42",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "unknown",
+        "invoice_like": true,
+        "label": "no text layer",
+        "reasons": [
+          "Image-only pages: the type is decided from what the vision reading finds."
+        ],
+        "signals": {
+          "blank_pages": [],
+          "page_kinds": [
+            "scanned"
+          ]
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-09-10 21:47:55",
+      "stage": "EXTRACT",
+      "event_type": "attempts",
+      "payload": {
+        "attempts": [
+          {
+            "kind": "vision",
+            "model": "gemini-3.5-flash-lite",
+            "ok": true,
+            "seconds": 2.38,
+            "input_tokens": 1192,
+            "output_tokens": 486
+          },
+          {
+            "kind": "verify",
+            "model": "gemini-3.5-flash-lite",
+            "ok": true,
+            "seconds": 1.48,
+            "input_tokens": 1142,
+            "output_tokens": 60
+          }
+        ]
+      }
+    },
+    {
+      "seq": 4,
+      "ts": "2026-09-10 21:47:55",
+      "stage": "EXTRACT",
+      "event_type": "fields",
+      "payload": {
+        "supplier_name": {
+          "status": "selected",
+          "raw": "Alex",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "not_applicable",
+            "normalization": "pass",
+            "ambiguity": "none",
+            "independent_read": "agree"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "buyer_name": {
+          "status": "selected",
+          "raw": "Sam",
+          "checks": {
+            "source_match": "pass",
+            "role_check": "not_applicable",
+            "normalization": "pass",
+            "ambiguity": "none",
+            "independent_read": "agree"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "invoice_number": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "invoice_date": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "due_date": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "currency": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "po_reference": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "subtotal_net": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "tax_total": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "shipping_total": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "invoice_gross_total": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        },
+        "amount_due": {
+          "status": "missing",
+          "raw": null,
+          "checks": {
+            "source_match": "not_applicable",
+            "role_check": "not_applicable",
+            "normalization": "not_evaluated",
+            "ambiguity": "missing"
+          },
+          "read_method": "llm_vision",
+          "evidence": {
+            "page": 1
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "ts": "2026-09-10 21:47:55",
+      "stage": "INGEST",
+      "event_type": "document_type",
+      "payload": {
+        "kind": "not_invoice",
+        "invoice_like": false,
+        "label": "not an invoice",
+        "reasons": [
+          "The page was read twice and reads as not an invoice.",
+          "Nothing was sent to the reading model and nothing needs filling in.",
+          "If this is an invoice, use “Read as an invoice anyway” to send it to the review desk."
+        ],
+        "signals": {
+          "invoice_words": 0,
+          "total_words": 0,
+          "tax_words": 0,
+          "billing_words": 0,
+          "amounts": 0,
+          "amounts_any": 0,
+          "monetary": {
+            "decimal": 0,
+            "currency_adjacent": 0,
+            "grouped_integer": 0
+          },
+          "currency_marks": 0,
+          "dates": 0,
+          "invoice_numbers": [],
+          "chars": 138,
+          "scan": true,
+          "fields_found": [
+            "supplier_name"
+          ]
+        },
+        "forced": false
+      }
+    },
+    {
+      "seq": 6,
+      "ts": "2026-09-10 21:47:55",
+      "stage": "DECIDE",
+      "event_type": "decision",
+      "payload": {
+        "route": "REJECT",
+        "codes": [
+          "UNSUPPORTED_DOCUMENT_TYPE"
+        ],
+        "explanation": "Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.",
+        "posted": false
+      }
+    },
+    {
+      "seq": 7,
+      "ts": "2026-09-10 21:47:55",
+      "stage": "DECIDE",
+      "event_type": "confidence_assessed",
+      "payload": {
+        "score": null,
+        "band": "unavailable",
+        "reasons": [
+          "No completed extraction available."
+        ]
+      }
+    }
+  ]
+}
