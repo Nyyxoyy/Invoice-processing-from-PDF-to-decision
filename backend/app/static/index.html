@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f8fa" />
+    <title>Invoice desk</title>
+    <script>
+      // Apply the saved theme before first paint so there is no light flash.
+      (function () {
+        try {
+          var t = localStorage.getItem("theme");
+          if (t !== "dark" && t !== "light")
+            t = matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          document.documentElement.dataset.theme = t;
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/app.css" />
+    <script src="/static/workflow.js" defer></script>
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <aside class="sidebar">
+      <a class="brand" href="#invoices"
+        ><span class="brand-mark">i</span>Invoice desk</a
+      >
+      <div class="workspace-label" id="workspace-label">WORKSPACE</div>
+      <nav aria-label="Main navigation">
+        <a href="#invoices" data-nav="invoices"
+          ><span aria-hidden="true">▤</span
+          ><span id="invoice-nav-label">Invoice reviews</span
+          ><span id="nav-count" class="nav-count"></span
+        ></a>
+        <a href="#requests" data-nav="requests" class="reviewer-only"
+          ><span aria-hidden="true">↗</span>My requests</a
+        >
+        <a href="#pos" data-nav="pos"
+          ><span aria-hidden="true">▦</span>Purchase orders</a
+        >
+        <a href="#vendors" data-nav="vendors"
+          ><span aria-hidden="true">◇</span>Suppliers</a
+        >
+        <a href="#queue" data-nav="queue" class="admin-only" hidden
+          ><span aria-hidden="true">◈</span>Requests<span
+            id="queue-count"
+            class="nav-count"
+          ></span
+        ></a>
+      </nav>
+      <div class="sidebar-bottom">
+        <a href="#activity" data-nav="activity">Activity log</a
+        ><a href="#help" data-nav="help">Help & demo settings</a>
+        <div class="workspace-name">
+          <span class="avatar">AC</span>
+          <div>Acme Corporation<small>Demo workspace</small></div>
+        </div>
+      </div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar">
+        <span id="breadcrumb">Accounts payable / Invoices</span>
+        <div class="topbar-right">
+          <span id="role-badge" class="role-badge" hidden></span>
+          <button
+            id="switch-role"
+            class="theme-toggle"
+            type="button"
+            data-action="switch-role"
+            title="Sign out and choose another role"
+            hidden
+          >
+            Switch role
+          </button>
+          <span class="demo-label">Demo workspace</span>
+          <button
+            id="theme-toggle"
+            class="theme-toggle"
+            type="button"
+            data-action="toggle-theme"
+            aria-pressed="false"
+            title="Switch between light and dark theme"
+          >
+            <span aria-hidden="true">◐</span
+            ><span class="theme-toggle-label">Dark</span>
+          </button>
+        </div>
+      </header>
+      <main id="main" tabindex="-1"></main>
+    </div>
+    <input
+      id="file-input"
+      type="file"
+      accept=".pdf,application/pdf"
+      hidden
+      aria-label="Choose invoice PDF"
+    />
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <dialog id="app-modal" class="app-modal" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <div>
+          <h2 id="modal-title"></h2>
+          <p id="modal-subtitle" hidden></p>
+        </div>
+        <button type="button" class="modal-close" data-action="close-modal" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <form method="dialog">
+        <h2 id="confirm-title"></h2>
+        <p id="confirm-message"></p>
+        <div class="button-row">
+          <button value="cancel">Cancel</button
+          ><button id="confirm-yes" value="confirm" class="danger">
+            Confirm
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <noscript>Enable JavaScript to upload and review invoices.</noscript>
+  </body>
+</html>

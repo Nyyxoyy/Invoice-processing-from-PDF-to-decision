@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AP Invoice Decisioning</title>
+<link rel="stylesheet" href="/static/_ds/bicycle-product-design-system-2f8c56ca-c2f5-45a7-bec9-84af7e179693/colors_and_type.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  html,body{margin:0;padding:0;background:#15202B;}
+  *{box-sizing:border-box;}
+  body{font-family:var(--font-sans);color:var(--fg);}
+  a{color:#39ACFF;text-decoration:none;} a:hover{color:#6CBAF2;}
+  @keyframes bcy-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+  input::placeholder{color:#696D77;}
+  .shell{display:flex;flex-direction:row;height:100vh;background:var(--bg);overflow:hidden;}
+  .rail{width:72px;height:100%;background:#0F1822;display:flex;flex-direction:column;flex-shrink:0;}
+  .rail-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:10px 4px;cursor:pointer;font-size:10px;font-weight:500;line-height:1.15;text-align:center;transition:color .12s;color:#8D8F92;}
+  .rail-item:hover{color:#F4F4F4;}
+  .rail-item.active{color:#00C19F;}
+  .rail-tile{width:40px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:18px;}
+  .rail-item.active .rail-tile{background:rgba(0,193,159,0.14);}
+  .hdr{display:flex;align-items:center;gap:14px;height:60px;padding:0 16px;flex-shrink:0;background:#0F1822;border-bottom:1px solid #212B36;}
+  .hdr-chip{display:inline-flex;align-items:center;gap:8px;background:#212B36;border-radius:8px;height:36px;padding:0 12px 0 10px;font-size:14px;color:#F4F4F4;white-space:nowrap;}
+  main{flex:1;overflow-y:auto;padding:24px 32px 48px;}
+  .wrap{max-width:1160px;margin:0 auto;}
+  .card{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-large);box-shadow:var(--shadow-card);overflow:hidden;}
+  .card-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border-hair);}
+  .card-hd h3{margin:0;font-size:14px;font-weight:500;}
+  .thead{display:grid;gap:8px;padding:8px 16px;background:var(--surface-tint);font-size:11px;color:var(--fg-subtle);}
+  .drop{display:block;border:1.5px dashed var(--border-strong);border-radius:var(--radius-large);background:var(--bg-raised);padding:36px 24px;text-align:center;cursor:pointer;margin-bottom:24px;transition:border-color .12s,background .12s;}
+  .drop:hover,.drop.hover{border-color:#39ACFF;background:#232F3B;}
+  .ghostbtn{background:none;border:none;cursor:pointer;color:var(--fg-subtle);font-family:var(--font-sans);font-size:12px;padding:4px 6px;}
+  .ghostbtn:hover{color:#B7BCC9;}
+  .run-row{display:grid;grid-template-columns:minmax(110px,1fr) 64px minmax(100px,168px) 58px 26px;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--border-hair);cursor:pointer;}
+  .run-del{background:none;border:none;cursor:pointer;color:var(--fg-subtle);font-size:12px;padding:4px;border-radius:6px;opacity:0;transition:opacity .12s;}
+  .run-row:hover .run-del{opacity:1;}
+  .run-del:hover{color:#FF4F36;background:rgba(255,79,54,0.12);}
+  .run-row:hover{background:#26313D;}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;border-radius:9999px;padding:3px 10px;white-space:nowrap;border:1px solid;}
+  .chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;border-radius:4px;padding:2px 6px;white-space:nowrap;border:1px solid;}
+  .code-chip{font-family:var(--font-mono);font-size:11px;color:var(--fg-muted);background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius-s);padding:3px 8px;}
+  .btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#1463B8;color:#F4F4F4;border:none;border-radius:8px;font-family:var(--font-sans);font-size:13px;font-weight:500;height:36px;padding:0 16px;cursor:pointer;}
+  .btn-primary:hover{background:#0083C1;}
+  .btn-danger{display:inline-flex;align-items:center;justify-content:center;background:rgba(255,79,54,0.14);color:#FF4F36;border:1px solid rgba(255,79,54,0.4);border-radius:8px;font-family:var(--font-sans);font-size:13px;font-weight:500;height:34px;padding:0 14px;cursor:pointer;}
+  .btn-danger:hover{background:rgba(255,79,54,0.22);}
+  .rvw-input{background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius-default);color:var(--fg);font-family:var(--font-mono);font-size:12px;padding:7px 10px;outline:none;min-width:0;width:100%;}
+  .rvw-input:focus{border-color:#39ACFF;}
+  .field-row{display:grid;grid-template-columns:minmax(130px,170px) 76px minmax(110px,1fr) 84px minmax(180px,260px) 78px;gap:8px;align-items:center;padding:9px 16px;border-top:1px solid var(--border-hair);}
+  .ev-row{display:grid;grid-template-columns:36px 78px minmax(0,1fr);gap:10px;padding:7px 16px;align-items:baseline;}
+  .trace-btn{width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;padding:14px 16px;font-family:var(--font-sans);color:var(--fg);}
+  .trace-btn:hover{background:#26313D;}
+  .pocard{background:var(--bg-inset);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;}
+  .pocard:hover{border-color:#39ACFF;}
+  #toast{position:fixed;bottom:24px;right:24px;z-index:50;width:380px;display:none;background:var(--bg-overlay);border:1px solid var(--border);border-radius:var(--radius-default);box-shadow:0 4px 16px rgba(0,0,0,0.4);padding:12px 14px;}
+  .mono{font-family:var(--font-mono);}
+  .pdfpage{position:relative;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.5);flex-shrink:0;}
+  .pdfpage img{display:block;width:100%;}
+  .evbox{position:absolute;border:2px solid;border-radius:2px;cursor:pointer;transition:box-shadow .12s;min-height:12px;}
+  .evbox:hover{box-shadow:0 0 0 3px rgba(57,172,255,0.4);z-index:5;}
+  .evnum{position:absolute;top:50%;right:100%;transform:translate(-3px,-50%);width:17px;height:17px;border-radius:50%;color:#fff;font-family:var(--font-mono);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.4);}
+  .evlegend{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:4px 18px;padding:12px 16px;border-top:1px solid var(--border-hair);}
+  .evlegend .li{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;padding:3px 6px;border-radius:6px;}
+  .evlegend .li:hover{background:#26313D;}
+  .evlegend .num{width:17px;height:17px;border-radius:50%;color:#fff;font-family:var(--font-mono);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+  @keyframes evflash{0%,100%{box-shadow:0 0 0 0 rgba(57,172,255,0);}30%{box-shadow:0 0 0 6px rgba(57,172,255,0.55);}}
+  .evbox.flash{animation:evflash 900ms ease-out 2;}
+  .field-row.clickable{cursor:pointer;} .field-row.clickable:hover{background:#26313D;}
+  .hide{display:none!important;}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="rail">
+    <div style="display:flex;align-items:center;justify-content:center;padding:14px 0 10px;">
+      <span title="AP decisioning" style="width:36px;height:36px;border-radius:8px;background:rgba(0,193,159,0.14);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:16px;"><i class="fa-solid fa-file-invoice-dollar"></i></span>
+    </div>
+    <div style="height:1px;background:#212B36;margin:0 14px;"></div>
+    <div class="rail-item active" data-nav="dashboard"><span class="rail-tile"><i class="fa-solid fa-file-lines"></i></span>Invoices</div>
+    <div class="rail-item" data-nav="pos"><span class="rail-tile"><i class="fa-solid fa-rectangle-list"></i></span>POs</div>
+    <div class="rail-item" data-nav="vendors"><span class="rail-tile"><i class="fa-solid fa-building"></i></span>Vendors</div>
+    <div class="rail-item" data-nav="audit"><span class="rail-tile"><i class="fa-solid fa-square-check"></i></span>Audit log</div>
+    <div style="flex:1;"></div>
+    <div style="height:1px;background:#212B36;margin:0 14px;"></div>
+    <div class="rail-item" data-nav="help"><span class="rail-tile"><i class="fa-solid fa-circle-question"></i></span>Help</div>
+  </nav>
+  <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
+    <header class="hdr">
+      <div class="hdr-chip"><i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent);font-size:14px;"></i><span>AP decisioning</span></div>
+      <span id="nav-label" style="font-size:16px;font-weight:700;">Invoices</span>
+      <div style="flex:1;"></div>
+      <div class="hdr-chip" style="padding-left:6px;"><span style="width:26px;height:26px;border-radius:6px;background:#3B444D;color:#B7BCC9;display:inline-flex;align-items:center;justify-content:center;font-size:12px;"><i class="fa-solid fa-user"></i></span><span style="color:#B7BCC9;">AP clerk</span></div>
+      <div class="hdr-chip"><i class="fa-solid fa-briefcase" style="color:#8D8F92;font-size:13px;"></i><span>Finance demo</span></div>
+    </header>
+    <main>
+      <!-- DASHBOARD -->
+      <div id="view-dashboard" class="wrap">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:20px;">
+          <h1 style="margin:0;font-size:20px;font-weight:500;letter-spacing:-0.01em;">Invoices</h1>
+          <button class="ghostbtn" onclick="resetDemo()">reset demo workspace</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:20px;">
+          <div class="card" style="padding:12px 14px;"><div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;"><span style="color:#39ACFF;">1</span> AI reads the PDF</div><div style="font-size:11.5px;color:var(--fg-subtle);margin-top:4px;">A model points at where each field is stated — it never invents values</div></div>
+          <div class="card" style="padding:12px 14px;"><div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;"><span style="color:#A186F0;">2</span> Code verifies every value</div><div style="font-size:11.5px;color:var(--fg-subtle);margin-top:4px;">Each value is checked against the document text and the arithmetic must add up</div></div>
+          <div class="card" style="padding:12px 14px;"><div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;"><span style="color:#E6A516;">3</span> Rules decide the money</div><div style="font-size:11.5px;color:var(--fg-subtle);margin-top:4px;">Matching against purchase orders and budgets — no AI in the approval decision</div></div>
+          <div class="card" style="padding:12px 14px;"><div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;"><span style="color:#3BB443;">4</span> You resolve the holds</div><div style="font-size:11.5px;color:var(--fg-subtle);margin-top:4px;">Anything uncertain waits for a human — with exact reasons and what to do next</div></div>
+        </div>
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept="application/pdf" style="display:none;">
+          <i class="fa-solid fa-file-arrow-up" style="font-size:22px;color:var(--fg-muted);"></i>
+          <div style="margin-top:10px;font-size:14px;color:var(--fg);">Drop a vendor invoice PDF</div>
+          <div style="margin-top:4px;font-size:12px;color:var(--fg-subtle);">One file per run · the pipeline reads, verifies and decides — every step logged</div>
+        </label>
+        <div id="samples" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:-12px 0 24px;"></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:24px;align-items:start;">
+          <section class="card">
+            <div class="card-hd"><h3>Runs</h3><span style="font-size:12px;color:var(--fg-subtle);">newest first · review runs marked <i class="fa-solid fa-rotate-left" style="font-size:11px;"></i></span></div>
+            <div class="thead" style="grid-template-columns:minmax(110px,1fr) 64px minmax(100px,168px) 58px 26px;"><span>File</span><span>Run</span><span>Disposition</span><span style="text-align:right;">Time</span><span></span></div>
+            <div id="run-rows"></div>
+          </section>
+          <section id="po-groups" style="display:flex;flex-direction:column;gap:16px;"></section>
+        </div>
+      </div>
+
+      <!-- LIVE -->
+      <div id="view-live" class="wrap hide" style="max-width:960px;">
+        <button class="ghostbtn" style="display:flex;align-items:center;gap:6px;padding:0 0 14px;" onclick="goHome()"><i class="fa-solid fa-arrow-left" style="font-size:11px;"></i>Back — processing continues</button>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+          <h1 style="margin:0;font-size:20px;font-weight:500;letter-spacing:-0.01em;">Processing <span id="live-file"></span></h1>
+          <span id="live-elapsed" class="mono" style="font-size:12px;color:var(--fg-subtle);border:1px solid var(--border);border-radius:9999px;padding:2px 10px;"></span>
+        </div>
+        <p style="margin:0 0 20px;font-size:13px;color:var(--fg-subtle);">Live pipeline events — each card updates the moment its stage actually reports</p>
+        <div id="live-stages" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <div id="live-done" class="hide" style="margin-top:20px;background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-large);padding:18px 20px;box-shadow:var(--shadow-card);">
+          <span id="live-pill"></span>
+          <div id="live-explain" style="margin:10px 0 14px;font-size:14px;line-height:21px;color:var(--fg);max-width:760px;"></div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn-primary" id="live-open">See the full decision <i class="fa-regular fa-circle-right"></i></button>
+            <button class="ghostbtn" style="border:1px solid var(--border);border-radius:8px;padding:0 14px;" onclick="goHome()">Process another invoice</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- POS -->
+      <div id="view-pos" class="wrap hide">
+        <h1 style="margin:0 0 6px;font-size:20px;font-weight:500;">Purchase orders</h1>
+        <p style="margin:0 0 20px;font-size:13px;color:var(--fg-subtle);">Approved invoices consume PO budget. Held and rejected invoices never touch it.</p>
+        <div class="card" style="padding:12px 16px;margin-bottom:16px;display:grid;grid-template-columns:150px 1fr 90px 160px auto;gap:8px;align-items:center;">
+          <input class="rvw-input" id="np-id" placeholder="PO id">
+          <select class="rvw-input" id="np-sup" style="font-family:var(--font-sans);"></select>
+          <input class="rvw-input" id="np-cur" placeholder="USD">
+          <input class="rvw-input" id="np-amt" placeholder="Amount">
+          <button class="btn-primary" style="height:34px;" onclick="addPoFromTab()"><i class="fa-solid fa-plus"></i> Create PO</button>
+        </div>
+        <div id="pos-full" style="display:flex;flex-direction:column;gap:16px;"></div>
+      </div>
+
+      <!-- VENDORS -->
+      <div id="view-vendors" class="wrap hide">
+        <h1 style="margin:0 0 6px;font-size:20px;font-weight:500;">Vendor master</h1>
+        <p style="margin:0 0 20px;font-size:13px;color:var(--fg-subtle);">Only invoices from approved vendors can post. Unknown suppliers hold; blocked suppliers reject.</p>
+        <div class="card" style="padding:12px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 100px auto;gap:8px;align-items:center;">
+          <input class="rvw-input" id="nv-name" placeholder="New vendor legal name" style="font-family:var(--font-sans);">
+          <input class="rvw-input" id="nv-country" placeholder="Country" style="font-family:var(--font-sans);">
+          <button class="btn-primary" style="height:34px;" onclick="addVendorFromTab()"><i class="fa-solid fa-plus"></i> Onboard vendor</button>
+        </div>
+        <div id="vendors-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;"></div>
+      </div>
+
+      <!-- AUDIT -->
+      <div id="view-audit" class="wrap hide">
+        <h1 style="margin:0 0 6px;font-size:20px;font-weight:500;">Audit log</h1>
+        <p style="margin:0 0 20px;font-size:13px;color:var(--fg-subtle);">Append-only record of every pipeline step, rule evaluation, and decision — newest first.</p>
+        <section class="card"><div id="audit-list" style="padding:6px 0;"></div></section>
+      </div>
+
+      <!-- RUN DETAIL -->
+      <div id="view-run" class="wrap hide">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 14px;">
+          <button class="ghostbtn" style="display:flex;align-items:center;gap:6px;padding:0;" onclick="goHome()"><i class="fa-solid fa-arrow-left" style="font-size:11px;"></i>All runs</button>
+          <button class="ghostbtn" style="display:flex;align-items:center;gap:6px;padding:0;" onclick="deleteRun(state.activeRunId)"><i class="fa-solid fa-trash-can" style="font-size:11px;"></i>Delete run</button>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+          <h1 id="d-file" style="margin:0;font-size:20px;font-weight:500;letter-spacing:-0.01em;white-space:nowrap;"></h1>
+          <span id="d-meta" class="mono" style="font-size:12px;color:var(--fg-subtle);"></span>
+        </div>
+        <div id="d-banner"></div>
+        <div id="d-currency"></div>
+        <div id="d-doc"></div>
+        <div id="d-review"></div>
+        <div id="d-fields"></div>
+        <div id="d-trace"></div>
+      </div>
+    </main>
+  </div>
+</div>
+<div id="help-modal" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:60;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this)this.classList.add('hide')">
+  <div class="card" style="max-width:640px;margin:24px;padding:24px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">How this works</h2>
+      <button class="ghostbtn" onclick="document.querySelector('#help-modal').classList.add('hide')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;line-height:20px;color:var(--fg-muted);display:flex;flex-direction:column;gap:10px;">
+      <p style="margin:0;">Drop a vendor invoice PDF. The pipeline reads it, verifies every value against the document, matches it to a purchase order, and makes one of four decisions:</p>
+      <p style="margin:0;"><b style="color:#3BB443;">Auto-approved</b> — everything verified, within budget. The amount posts to the PO ledger.<br>
+      <b style="color:#3BB443;">Approved · exception</b> — a small overage inside the authorized band. Posts, and the exception is logged.<br>
+      <b style="color:#E6A516;">Held for review</b> — something is uncertain or missing. Nothing posts until a person resolves it on the run page.<br>
+      <b style="color:#FF4F36;">Rejected</b> — a certain violation (duplicate, blocked vendor). Final.</p>
+      <p style="margin:0;">The core rule: <b>the AI only reads — code decides all money.</b> Every decision shows its reasons, its arithmetic, and a full step-by-step trace.</p>
+      <p style="margin:0;color:var(--fg-subtle);">Try the sample invoices under the drop zone to see each path.</p>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const EXP = {JPY:0,KRW:0,CLP:0,VND:0,ISK:0,PYG:0,UGX:0,RWF:0,GNF:0,DJF:0,KMF:0,VUV:0,XAF:0,XOF:0,XPF:0,BIF:0,BHD:3,KWD:3,OMR:3,JOD:3,TND:3,IQD:3,LYD:3};
+const expOf = c => c in EXP ? EXP[c] : 2;
+function fmt(minor, code){
+  const exp = expOf(code); const neg = minor < 0;
+  let s = String(Math.abs(minor)).padStart(exp+1, "0");
+  const i = exp ? s.slice(0,-exp) : s, f = exp ? s.slice(-exp) : "";
+  return esc(code) + " " + (neg?"-":"") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (exp ? "." + f : "");
+}
+
+// ---------- meaning maps ----------
+function dispMeta(disp, runStatus, mode){
+  if (runStatus === "failed") return {label:"Run failed", fg:"#DA7F8F", bg:"rgba(218,127,143,0.12)", bd:"rgba(218,127,143,0.35)", icon:"fa-solid fa-triangle-exclamation"};
+  if (disp === "approved" && mode === "reviewer") return {label:"Approved by reviewer", fg:"#3BB443", bg:"rgba(59,180,67,0.12)", bd:"rgba(59,180,67,0.4)", icon:"fa-solid fa-user-check"};
+  if (disp === "approved" && mode === "automatic_exception") return {label:"Approved · exception", fg:"#3BB443", bg:"rgba(59,180,67,0.12)", bd:"rgba(230,165,22,0.5)", icon:"fa-regular fa-flag"};
+  if (disp === "approved") return {label:"Auto-approved", fg:"#3BB443", bg:"rgba(59,180,67,0.12)", bd:"rgba(59,180,67,0.4)", icon:"fa-regular fa-circle-check"};
+  if (disp === "held") return {label:"Held for review", fg:"#E6A516", bg:"rgba(230,165,22,0.12)", bd:"rgba(230,165,22,0.4)", icon:"fa-regular fa-hand"};
+  if (disp === "rejected" && mode === "reviewer") return {label:"Rejected by reviewer", fg:"#FF4F36", bg:"rgba(255,79,54,0.12)", bd:"rgba(255,79,54,0.4)", icon:"fa-solid fa-user-xmark"};
+  if (disp === "rejected") return {label:"Rejected", fg:"#FF4F36", bg:"rgba(255,79,54,0.12)", bd:"rgba(255,79,54,0.4)", icon:"fa-regular fa-circle-xmark"};
+  return {label:disp || "—", fg:"#B7BCC9", bg:"rgba(108,132,157,0.12)", bd:"#3B444D", icon:"fa-regular fa-circle"};
+}
+const pillHtml = m => `<span class="pill" style="color:${m.fg};background:${m.bg};border-color:${m.bd};"><i class="${m.icon}" style="font-size:10px;"></i>${esc(m.label)}</span>`;
+const CODE_INFO = {
+  VENDOR_UNKNOWN:{label:"Supplier not in vendor master", action:"If it's a known vendor misread from the PDF, correct supplier_name (see Vendors tab). If the supplier is genuinely unknown, Reject — unknown suppliers cannot be paid"},
+  VENDOR_BLOCKED:{label:"Supplier is blocked", action:"No action possible — blocked vendors cannot be paid"},
+  NO_PO_MATCH:{label:"No purchase order confirmed", action:"Pick the right PO from the candidates on the right"},
+  PO_MULTIPLE_REFS:{label:"Document mentions several POs", action:"Pick the single correct PO from the candidates"},
+  PO_CLOSED:{label:"Referenced PO is closed", action:"Pick an open PO, or reopen the referenced one"},
+  PO_VENDOR_MISMATCH:{label:"PO belongs to a different supplier", action:"Pick a PO that belongs to this supplier"},
+  PO_FUZZY_CANDIDATE:{label:"PO match is a guess, not a reference", action:"Confirm the correct PO from the candidates"},
+  PO_BUDGET_EXCEEDED:{label:"Would exceed the PO budget", action:"Verify the invoice amount, or amend the PO before approving"},
+  VARIANCE_EXCEPTION:{label:"Small overage inside the authorized band", action:"No action — logged for month-end audit"},
+  DUP_FILE_HASH:{label:"Exact same file already processed", action:"No action — open the original run instead"},
+  DUP_INVOICE_NO:{label:"This invoice number already posted", action:"No action — duplicates are final"},
+  DUP_FINGERPRINT:{label:"Looks like a same-day duplicate", action:"Compare with the original; approve only if genuinely separate"},
+  CONTENT_CONFLICT:{label:"Same invoice number, different amount", action:"Establish which version is correct before anything posts"},
+  MATH_MISMATCH:{label:"Amounts on the document do not add up", action:"Correct subtotal, tax, shipping or total so they reconcile"},
+  MISSING_FIELD:{label:"A required field is missing or unverified", action:"Fill or correct the fields marked missing/failed below"},
+  UNVERIFIED_FIELD:{label:"A value could not be verified", action:"Correct the affected field"},
+  AMBIGUOUS_CURRENCY:{label:"Currency not clearly stated", action:"Correct the currency field to an ISO code (e.g. USD, EUR)"},
+  AMBIGUOUS_DATE:{label:"Date reads two ways", action:"A date like 03.04.2021 is legal as both 3 April and 4 March — confirm which and correct to YYYY-MM-DD. (Dates with an unambiguous day, like 16.12.2021, parse automatically.)"},
+  CURRENCY_MISMATCH:{label:"Invoice and PO currencies differ", action:"Pick a PO in the invoice's currency"},
+  UNSUPPORTED_DOCUMENT_TYPE:{label:"Not a standard invoice", action:"Handle outside this workflow"},
+  UNSUPPORTED_AMOUNT_STRUCTURE:{label:"Contains prepayments or adjustments", action:"These never auto-approve — verify manually before deciding"},
+  REVIEW_REQUIRED_SCAN:{label:"Values read from a scanned image", action:"Attest the scan-read fields after checking them against the page"},
+  REVIEWER_REJECTED:{label:"Rejected by a reviewer", action:"See the recorded reason"},
+};
+const codeLabel = c => CODE_INFO[c]?.label ?? c;
+// where each hold reason gets FIXED in the review panel
+const CODE_TARGET = {
+  NO_PO_MATCH:{kind:"po"}, PO_MULTIPLE_REFS:{kind:"po"}, PO_FUZZY_CANDIDATE:{kind:"po"},
+  PO_CLOSED:{kind:"po"}, PO_VENDOR_MISMATCH:{kind:"po"}, CURRENCY_MISMATCH:{kind:"po"},
+  VENDOR_UNKNOWN:{kind:"field", field:"supplier_name"},
+  AMBIGUOUS_CURRENCY:{kind:"field", field:"currency"},
+  AMBIGUOUS_DATE:{kind:"field", field:"invoice_date"},
+  MATH_MISMATCH:{kind:"field", field:"invoice_gross_total"},
+  MISSING_FIELD:{kind:"problems"}, UNVERIFIED_FIELD:{kind:"problems"},
+  REVIEW_REQUIRED_SCAN:{kind:"attest"},
+};
+const REQUIRED_FIELDS = ["supplier_name","invoice_number","invoice_date","currency","subtotal_net","tax_total","invoice_gross_total","po_reference"];
+function fieldNeedsInput(name, v){
+  if (!REQUIRED_FIELDS.includes(name)) return false;
+  if (v.review_status === "corrected" || v.review_status === "attested") return false;
+  if (v.status !== "selected" || v.raw_value == null) return true;
+  const c = v.checks ?? {};
+  if (c.source_match === "fail" || c.role_check === "fail" || c.normalization === "fail") return true;
+  if (v.read_method === "llm_vision") return true;  // needs attestation
+  return false;
+}
+function jumpToFix(kind, field){
+  const pulse = el => { if (!el) return; el.scrollIntoView({behavior:"smooth", block:"center"});
+    el.style.transition = "box-shadow .2s"; el.style.boxShadow = "0 0 0 3px rgba(230,165,22,0.65)";
+    setTimeout(() => el.style.boxShadow = "", 1600); };
+  if (kind === "po"){ pulse($("#po-cands")); return; }
+  if (kind === "attest"){ pulse(document.querySelector(".rvw-attest")?.closest("label")); return; }
+  let name = field;
+  if (kind === "problems"){
+    const first = document.querySelector(".rvw-row.problem input.rvw-field");
+    name = first?.dataset.field;
+  }
+  const input = name && document.querySelector(`.rvw-field[data-field="${CSS.escape(name)}"]`);
+  if (input){ pulse(input.closest(".rvw-row") ?? input); input.focus(); }
+  else pulse($("#d-review"));
+  // flashEvidence's table fallback: open the advanced section if needed
+  if (name && !input && $("#adv-body")?.classList.contains("hide")) toggleAdv();
+}
+const CODE_GROUPS = {
+  "Extraction": ["MISSING_FIELD","UNVERIFIED_FIELD","MATH_MISMATCH","AMBIGUOUS_CURRENCY","AMBIGUOUS_DATE","REVIEW_REQUIRED_SCAN","UNSUPPORTED_DOCUMENT_TYPE","UNSUPPORTED_AMOUNT_STRUCTURE"],
+  "Business conflicts": ["VENDOR_UNKNOWN","VENDOR_BLOCKED","PO_VENDOR_MISMATCH","PO_CLOSED","NO_PO_MATCH","PO_FUZZY_CANDIDATE","PO_MULTIPLE_REFS","DUP_FILE_HASH","DUP_INVOICE_NO","DUP_FINGERPRINT","CONTENT_CONFLICT","CURRENCY_MISMATCH","REVIEWER_REJECTED"],
+  "Policy limits": ["PO_BUDGET_EXCEEDED","VARIANCE_EXCEPTION"],
+};
+function groupCodes(codes){
+  const out = [];
+  for (const [g, list] of Object.entries(CODE_GROUPS)){
+    const hits = codes.filter(c => list.includes(c));
+    if (hits.length) out.push({group:g, codes:hits});
+  }
+  const known = Object.values(CODE_GROUPS).flat();
+  const other = codes.filter(c => !known.includes(c));
+  if (other.length) out.push({group:"Other", codes:other});
+  return out;
+}
+function checkChip(k, stateName){
+  const labels = {source_match:"source", role_check:"role", normalization:"norm"};
+  const S = {
+    pass:{icon:"fa-solid fa-check", c:"#3BB443", bg:"rgba(59,180,67,0.1)", bd:"rgba(59,180,67,0.3)", tip:"pass — code-verified"},
+    fail:{icon:"fa-solid fa-xmark", c:"#FF4F36", bg:"rgba(255,79,54,0.1)", bd:"rgba(255,79,54,0.3)", tip:"fail — caught an error"},
+    not_evaluated:{icon:"fa-solid fa-minus", c:"#696D77", bg:"transparent", bd:"#3B444D", tip:"not evaluated — no value to check (not a failure)"},
+    not_applicable:{icon:"fa-regular fa-eye", c:"#E6A516", bg:"rgba(230,165,22,0.08)", bd:"rgba(230,165,22,0.3)", tip:"scan evidence — needs human attestation"},
+  };
+  const s = S[stateName] || S.not_evaluated;
+  return `<span class="chip" title="${esc(k)}: ${esc(s.tip)}" style="color:${s.c};background:${s.bg};border-color:${s.bd};"><i class="${s.icon}" style="font-size:9px;"></i>${labels[k]||esc(k)}</span>`;
+}
+const stageColor = st => ({INGEST:"#8D8F92",EXTRACT:"#39ACFF",VALIDATE:"#A186F0",MATCH:"#6CBAF2",DECIDE:"#E6A516",COMMIT:"#3BB443",MASTER:"#00C19F"}[st] || "#8D8F92");
+
+// ---------- event formatting (real events only) ----------
+function fmtEvents(events){
+  const out = [];
+  for (const e of events){
+    const p = e.payload; const base = {seq: e.seq, stage: e.stage, mono:false, model:null};
+    if (e.event_type === "classified") out.push({...base, text:`parsed ${p.pages} page(s) · ${(p.page_kinds||[]).join(", ")} · ${p.blocks} blocks · revision ${p.extraction_revision_id}`});
+    else if (e.event_type === "duplicate_submission") out.push({...base, text:`identical bytes already ingested · original invoice ${p.original_invoice_id ?? "—"}`});
+    else if (e.event_type === "operational_failure") out.push({...base, text:`operational failure: ${p.reason}`});
+    else if (e.event_type === "attempts") for (const a of (p.attempts||[])) out.push({...base, text:`model attempt (${a.kind})${a.ok ? "" : " — " + (a.error ?? "failed")}`, model:a.model, latency:(a.seconds ?? "?") + " s", tokens:`${a.input_tokens ?? "?"} in / ${a.output_tokens ?? "?"} out`});
+    else if (e.event_type === "fields"){
+      const vals = Object.values(p); const sel = vals.filter(v => v.status === "selected").length;
+      const missing = Object.entries(p).filter(([,v]) => v.status !== "selected").map(([k]) => k);
+      out.push({...base, text:`${vals.length} fields proposed · ${sel} selected` + (missing.length ? ` · not stated: ${missing.join(", ")}` : "")});
+    }
+    else if (e.event_type === "gates"){
+      out.push({...base, text:`required_fields_ok=${p.required_fields_ok} · arithmetic_ok=${p.arithmetic_ok} · reconciliation: ${p.reconciliation ?? "—"}`});
+    }
+    else if (e.event_type === "rule_evaluated"){
+      out.push({...base, mono:true, text:`${p.rule}: A=${p.A}, I=${p.I}, C=${p.C}, B=${p.B}, D=${p.D} · T_primary=${p.T_primary} · T_exception=${p.T_exception}`});
+    }
+    else if (e.event_type === "decision"){
+      out.push({...base, text:`route=${p.route} · ${p.posted ? "amount posted to the approved ledger" : "nothing posted to the approved ledger"}`});
+      if (p.posted) out.push({seq:e.seq, stage:"COMMIT", mono:false, model:null, text:"posting committed atomically with the decision"});
+    }
+    else if (e.event_type === "budget_exhausted") out.push({...base, text:`model budget exhausted: ${p.error}`});
+    else if (e.event_type === "vendor_onboarded") out.push({...base, text:`supplier "${p.name}" onboarded to the vendor master as ${p.supplier_id} by ${p.actor}`});
+    else if (e.event_type === "po_created") out.push({...base, text:`purchase order ${p.po_id} created for ${p.supplier_id} · ${p.currency} ${p.amount_minor} minor units · by ${p.actor}`});
+    else out.push({...base, text: e.event_type + " " + JSON.stringify(p).slice(0, 160)});
+  }
+  return out;
+}
+
+// ---------- state + views ----------
+let state = {view:"dashboard", activeRunId:null, review:null, pos:[]};
+const NAV_LABELS = {dashboard:"Invoices", pos:"Purchase orders", vendors:"Vendors", audit:"Audit log", live:"Processing", run:""};
+function show(view){
+  state.view = view;
+  for (const v of ["dashboard","live","run","pos","vendors","audit"]) $("#view-" + v).classList.toggle("hide", v !== view);
+  $("#nav-label").textContent = view === "run" ? (state.activeRunId || "Run") : (NAV_LABELS[view] ?? view);
+  const railTarget = ["dashboard","live","run"].includes(view) ? "dashboard" : view;
+  document.querySelectorAll(".rail-item").forEach(r => r.classList.toggle("active", r.dataset.nav === railTarget));
+}
+document.querySelectorAll(".rail-item").forEach(r => r.addEventListener("click", () => {
+  const nav = r.dataset.nav;
+  if (nav === "help"){ $("#help-modal").classList.remove("hide"); return; }
+  if (nav === "dashboard") goHome();
+  else if (nav === "pos") showPos();
+  else if (nav === "vendors") showVendors();
+  else if (nav === "audit") showAudit();
+}));
+
+async function showPos(){
+  const pos = await fetch("/api/pos").then(r=>r.json());
+  const vendorRows = await fetch("/api/vendors").then(r=>r.json());
+  const vendors = Object.fromEntries(vendorRows.map(v=>[v.supplier_id, v.name]));
+  $("#np-sup").innerHTML = '<option value="">Supplier…</option>' + vendorRows.filter(v=>v.status==="approved").map(v => `<option value="${esc(v.supplier_id)}">${esc(v.name)}</option>`).join("");
+  const byCur = {};
+  pos.forEach(p => (byCur[p.currency] = byCur[p.currency] || []).push(p));
+  $("#pos-full").innerHTML = Object.entries(byCur).map(([cur, list]) => `
+    <section class="card">
+      <div class="card-hd"><h3>${esc(cur)}</h3><span style="font-size:11px;color:var(--fg-subtle);">amounts in ${esc(cur)} only — never summed across currencies</span></div>
+      <div class="thead" style="grid-template-columns:110px minmax(140px,1fr) 70px minmax(200px,320px) 120px;"><span>PO</span><span>Supplier</span><span>Status</span><span>Consumed / Base</span><span style="text-align:right;">Remaining</span></div>
+      ${list.map(p => {
+        const pct = Math.min(100, Math.round(p.consumed_minor / p.amount_minor * 100));
+        const bar = p.status === "closed" ? "#696D77" : (pct >= 100 ? "#E6A516" : "#39ACFF");
+        return `<div style="display:grid;grid-template-columns:110px minmax(140px,1fr) 70px minmax(200px,320px) 120px;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--border-hair);">
+          <span class="mono" style="font-size:13px;font-weight:500;">${esc(p.po_id)}</span>
+          <span style="font-size:12.5px;color:var(--fg-muted);">${esc(vendors[p.supplier_id] ?? p.supplier_id)}</span>
+          <span style="font-size:11px;color:${p.status==="open"?"#3BB443":"#8D8F92"};">${esc(p.status)}</span>
+          <span><span class="mono" style="font-size:12px;color:var(--fg-muted);">${fmt(p.consumed_minor, cur)} / ${fmt(p.amount_minor, cur)}</span>
+            <div style="height:5px;border-radius:9999px;background:var(--neutral-dark-600);margin-top:4px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${bar};"></div></div></span>
+          <span class="mono" style="font-size:12px;text-align:right;">${fmt(Math.max(0, p.amount_minor - p.consumed_minor), cur)}</span>
+        </div>`;
+      }).join("")}
+    </section>`).join("");
+  show("pos");
+}
+
+async function showVendors(){
+  const vendors = await fetch("/api/vendors").then(r=>r.json());
+  $("#vendors-list").innerHTML = vendors.map(v => `
+    <div class="card" style="padding:14px 16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span style="font-size:14px;font-weight:500;">${esc(v.name)}</span>
+        <span class="pill" style="${v.status === "approved" ? "color:#3BB443;background:rgba(59,180,67,0.12);border-color:rgba(59,180,67,0.4);" : "color:#FF4F36;background:rgba(255,79,54,0.12);border-color:rgba(255,79,54,0.4);"}">${esc(v.status)}</span>
+      </div>
+      <div class="mono" style="font-size:11px;color:var(--fg-subtle);margin-top:6px;">${esc(v.supplier_id)} · ${esc(v.country ?? "—")} · ${v.open_pos} open PO${v.open_pos === 1 ? "" : "s"}</div>
+      <div style="font-size:11.5px;color:var(--fg-subtle);margin-top:8px;">${v.status === "approved" ? "Invoices from this supplier can post once all gates pass." : "Invoices from this supplier are rejected."}</div>
+    </div>`).join("");
+  show("vendors");
+}
+
+async function showAudit(){
+  const events = await fetch("/api/audit").then(r=>r.json());
+  const evs = fmtEvents(events.map(e => ({seq:e.seq, stage:e.stage, event_type:e.event_type, payload:e.payload})));
+  $("#audit-list").innerHTML = events.length ? events.map((e, i) => {
+    const f = evs[i] ?? {text:e.event_type, mono:false, stage:e.stage};
+    return `<div class="ev-row" style="grid-template-columns:130px 90px 78px minmax(0,1fr);">
+      <span class="mono" style="font-size:11px;color:var(--fg-subtle);">${esc((e.ts||"").slice(11,19))} · ${esc(e.filename ?? "")}</span>
+      <span class="mono" style="font-size:11px;color:var(--fg-subtle);cursor:pointer;" onclick="openRun('${esc(e.run_id)}')">${esc(e.run_id.slice(0,10))}…</span>
+      <span class="mono" style="font-size:10.5px;font-weight:500;color:${stageColor(e.stage)};">${esc(e.stage)}</span>
+      <span style="${f.mono ? "font-family:var(--font-mono);font-size:12px;" : "font-size:12px;"}color:#B7BCC9;overflow-wrap:anywhere;">${esc(f.text)}</span>
+    </div>`;
+  }).join("") : '<div style="padding:16px;font-size:12.5px;color:var(--fg-subtle);">No events yet — process an invoice first.</div>';
+  show("audit");
+}
+
+async function loadSamples(){
+  const samples = await fetch("/api/samples").then(r=>r.json()).catch(() => []);
+  if (!samples.length) return;
+  $("#samples").innerHTML = `<span style="font-size:11.5px;color:var(--fg-subtle);">No PDF handy? Try a sample:</span>` +
+    samples.map(s => `<button class="ghostbtn" style="border:1px solid var(--border);border-radius:9999px;padding:4px 12px;" title="${esc(s.blurb)}" onclick="runSample('${esc(s.name)}')"><i class="fa-solid fa-file-pdf" style="margin-right:6px;font-size:10px;"></i>${esc(s.name)}</button>`).join("");
+}
+function runSample(name){
+  startLive(name, () => fetch(`/api/samples/${encodeURIComponent(name)}/run`, {method:"POST"}).then(r => r.json()));
+}
+function goHome(){ stopLive(); state.activeRunId = null; show("dashboard"); refresh(); }
+
+async function refresh(){
+  const [runs, pos] = await Promise.all([fetch("/api/runs").then(r=>r.json()), fetch("/api/pos").then(r=>r.json())]);
+  state.pos = pos;
+  $("#run-rows").innerHTML = runs.map(r => {
+    const m = dispMeta(r.disposition, r.run_status, r.decision_mode);
+    const isReview = r.kind === "review";
+    return `<div class="run-row" data-run="${esc(r.run_id)}">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <i class="${isReview ? "fa-solid fa-rotate-left" : "fa-solid fa-file-pdf"}" style="color:${isReview ? "#8D8F92" : "#B7BCC9"};font-size:12px;width:14px;text-align:center;"></i>
+        <span style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.filename)}</span>
+        ${isReview ? '<span style="font-size:10px;color:var(--fg-subtle);border:1px solid var(--border);border-radius:9999px;padding:1px 7px;white-space:nowrap;">review</span>' : ""}
+      </div>
+      <span style="font-size:12px;color:${r.run_status === "failed" ? "#DA7F8F" : "#8D8F92"};">${esc(r.run_status)}</span>
+      <span style="min-width:0;overflow:hidden;">${pillHtml(m)}</span>
+      <span class="mono" style="font-size:12px;color:var(--fg-subtle);text-align:right;">${esc((r.created_at||"").slice(11,19))}</span>
+      <button class="run-del" data-run="${esc(r.run_id)}" title="${r.disposition === "approved" ? "Posted runs cannot be deleted" : "Delete this run"}"><i class="fa-solid fa-trash-can"></i></button>
+    </div>`;
+  }).join("");
+  document.querySelectorAll("#run-rows .run-row").forEach(el => el.addEventListener("click", () => openRun(el.dataset.run)));
+  document.querySelectorAll("#run-rows .run-del").forEach(btn => btn.addEventListener("click", e => {
+    e.stopPropagation();
+    deleteRun(btn.dataset.run);
+  }));
+  const byCur = {};
+  pos.forEach(p => (byCur[p.currency] = byCur[p.currency] || []).push(p));
+  $("#po-groups").innerHTML = Object.entries(byCur).map(([cur, list]) => `
+    <div class="card" style="padding:14px 16px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+        <h3 style="margin:0;font-size:13px;font-weight:500;">Purchase orders · ${esc(cur)}</h3>
+        <span style="font-size:11px;color:var(--fg-subtle);">amounts in ${esc(cur)} only</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${list.map(p => {
+          const pct = Math.min(100, Math.round(p.consumed_minor / p.amount_minor * 100));
+          const bar = p.status === "closed" ? "#696D77" : (pct >= 100 ? "#E6A516" : "#39ACFF");
+          const stc = p.status === "open" ? "#3BB443" : "#8D8F92";
+          return `<div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <span class="mono" style="font-size:13px;font-weight:500;">${esc(p.po_id)}</span>
+                <span style="font-size:12px;color:var(--fg-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.supplier_id)}</span>
+              </div>
+              <span style="font-size:10.5px;color:${stc};border:1px solid ${p.status==="open"?"rgba(59,180,67,0.35)":"#3B444D"};border-radius:9999px;padding:1px 8px;">${esc(p.status)}</span>
+            </div>
+            <div style="height:6px;border-radius:9999px;background:var(--neutral-dark-600);margin:7px 0 5px;overflow:hidden;">
+              <div style="height:100%;width:${pct}%;background:${bar};border-radius:9999px;transition:width 600ms ease-out;"></div>
+            </div>
+            <div class="mono" style="font-size:12px;color:var(--fg-muted);">${fmt(p.consumed_minor, cur)} of ${fmt(p.amount_minor, cur)} · ${pct}%</div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`).join("");
+}
+
+// ---------- upload + live (real-time polling of run events) ----------
+const STAGES = ["INGEST","EXTRACT","VALIDATE","MATCH","DECIDE","COMMIT"];
+const STAGE_DESC = {
+  INGEST:  "Reading the file — hash, page classification, duplicate check",
+  EXTRACT: "AI points at where each field is stated — it never invents values",
+  VALIDATE:"Code verifies every value against the document and checks the arithmetic",
+  MATCH:   "Resolving the supplier and purchase order, checking the budget",
+  DECIDE:  "Deterministic rules produce the decision and its reasons",
+  COMMIT:  "Approved amounts post to the ledger atomically",
+};
+function renderLiveStages(stageState){
+  $("#live-stages").innerHTML = STAGES.map(id => {
+    const st = stageState[id] || {status:"pending", note:""};
+    const running = st.status === "running", done = st.status === "done";
+    return `<div style="display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;align-items:center;background:var(--bg-raised);border:${running ? "1.5px solid #39ACFF" : "1px solid var(--border)"};border-radius:8px;padding:12px 16px;box-shadow:var(--shadow-card);transition:border-color 150ms ease-out;">
+      <div style="display:flex;align-items:center;gap:9px;">
+        <i class="${done ? "fa-regular fa-circle-check" : running ? "fa-solid fa-circle-notch" : "fa-regular fa-circle"}" style="font-size:14px;width:16px;text-align:center;color:${done ? "#3BB443" : running ? "#39ACFF" : "#4A505C"};${running ? "animation:bcy-spin 900ms linear infinite;" : ""}"></i>
+        <span style="font-size:12.5px;font-weight:600;letter-spacing:0.02em;color:${done ? "#F4F4F4" : running ? "#39ACFF" : "#696D77"};">${id}</span>
+      </div>
+      <div style="font-size:12px;line-height:17px;${st.note ? "color:var(--fg-muted);font-family:var(--font-mono);font-size:11.5px;" : "color:var(--fg-subtle);"}overflow-wrap:anywhere;">${esc(st.note || STAGE_DESC[id])}</div>
+    </div>`;
+  }).join("");
+}
+
+let liveTimer = null, liveElapsed = null;
+function stopLive(){ clearInterval(liveTimer); clearInterval(liveElapsed); liveTimer = liveElapsed = null; }
+
+function startLive(filename, startRequest){
+  stopLive();
+  $("#live-file").textContent = filename;
+  $("#live-done").classList.add("hide");
+  const t0 = Date.now();
+  $("#live-elapsed").textContent = "0.0 s";
+  liveElapsed = setInterval(() => { $("#live-elapsed").textContent = ((Date.now() - t0) / 1000).toFixed(1) + " s"; }, 100);
+  const stageState = {INGEST:{status:"running", note:""}};
+  renderLiveStages(stageState); show("live");
+
+  let runId = null, requestFailed = null;
+  startRequest().then(res => {
+    runId = runId ?? res.run_id ?? (res.detail && res.detail.run_id) ?? null;
+    if (!runId) requestFailed = typeof res.detail === "string" ? res.detail : JSON.stringify(res.detail ?? res);
+  }).catch(e => { requestFailed = String(e); });
+
+  const applyDetail = (d, finished) => {
+    const evs = fmtEvents(d.events);
+    for (const s of STAGES) if (stageState[s]) stageState[s].status = "done";
+    let lastStage = null;
+    for (const ev of evs){ stageState[ev.stage] = {status:"done", note: ev.text.slice(0, 140)}; lastStage = ev.stage; }
+    if (!finished && lastStage){
+      const idx = STAGES.indexOf(lastStage);
+      const next = STAGES[Math.min(idx + 1, STAGES.length - 1)];
+      stageState[next] = stageState[next] ?? {status:"running", note:""};
+      if (stageState[next].status !== "done") stageState[next].status = "running";
+    }
+    renderLiveStages(stageState);
+    if (finished){
+      stopLive();
+      const m = dispMeta(d.disposition, d.run_status, d.decision_mode);
+      $("#live-pill").innerHTML = pillHtml(m);
+      const dec = d.events.filter(e => e.event_type === "decision").at(-1);
+      $("#live-explain").textContent = dec ? dec.payload.explanation : (d.failure_reason ? "The PDF could not be processed: " + d.failure_reason : "run " + d.run_status);
+      $("#live-done").classList.remove("hide");
+      $("#live-open").onclick = () => openRun(d.run_id);
+      refresh();
+    }
+  };
+
+  liveTimer = setInterval(async () => {
+    if (requestFailed){ stopLive(); toast("danger", "Processing failed", requestFailed); goHome(); return; }
+    try {
+      if (!runId){
+        // request still in flight: watch for the run the server just created
+        const runs = await fetch("/api/runs").then(r => r.json());
+        const candidate = runs.find(r => r.filename === filename && r.run_status === "running");
+        if (candidate) runId = candidate.run_id;
+      }
+      if (!runId) return;
+      const d = await fetch("/api/runs/" + encodeURIComponent(runId)).then(r => r.json());
+      applyDetail(d, d.run_status !== "running" && d.run_status !== "queued");
+    } catch (e) { /* transient poll error — next tick retries */ }
+  }, 450);
+}
+
+function upload(f){
+  if (!f) return;
+  startLive(f.name, () => {
+    const fd = new FormData(); fd.append("file", f);
+    return fetch("/api/invoices", {method:"POST", body:fd}).then(r => r.json());
+  });
+}
+const drop = $("#drop");
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("hover"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("hover"));
+drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("hover"); upload(e.dataTransfer.files[0]); });
+$("#file").addEventListener("change", e => { upload(e.target.files[0]); e.target.value = ""; });
+
+// ---------- run detail ----------
+async function openRun(runId){
+  stopLive();
+  state.activeRunId = runId;
+  const d = await fetch("/api/runs/" + encodeURIComponent(runId)).then(r => r.json());
+  const m = dispMeta(d.disposition, d.run_status, d.decision_mode);
+  const dec = d.events.filter(e => e.event_type === "decision").at(-1);
+  const gates = d.events.filter(e => e.event_type === "gates").at(-1);
+  const fieldsEv = d.events.filter(e => e.event_type === "fields").at(-1);
+  $("#d-file").textContent = d.filename ?? d.run_id;
+  $("#d-meta").textContent = `${d.run_id} · ${d.kind === "review" ? "review run" : "intake run"} · ${(d.created_at||"").slice(11,19)}`;
+  const codes = dec ? (dec.payload.codes ?? []) : [];
+  // Held runs: load the review payload first — its diagnosis is the single
+  // source for the checklist, the panel flags, the table marks and the boxes.
+  let review = null;
+  if (d.disposition === "held"){
+    review = await fetch(`/api/runs/${encodeURIComponent(runId)}/review`).then(r => r.ok ? r.json() : null);
+  }
+  const diag = review?.diagnosis ?? null;
+  const problems = diag?.field_problems ?? {};
+  const checklist = diag?.items ?? codes.map(c => ({code:c, label:codeLabel(c), action:CODE_INFO[c]?.action ?? "Review below", target:CODE_TARGET[c] ?? null, fields:[]}));
+  $("#d-banner").innerHTML = `
+    <div style="background:var(--bg-raised);border:1px solid var(--border);border-left:3px solid ${m.fg};border-radius:8px;padding:16px 20px;margin-bottom:20px;box-shadow:var(--shadow-card);">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${pillHtml(m)}<span style="font-size:11px;color:var(--fg-subtle);white-space:nowrap;">decision_mode: ${esc(d.decision_mode ?? "—")}</span></div>
+      <p style="margin:10px 0 0;font-size:15px;line-height:23px;color:var(--fg);max-width:860px;">${esc(dec ? dec.payload.explanation : (d.failure_reason ? "Run failed: " + d.failure_reason + ". No business decision was made." : "No decision recorded."))}</p>
+      ${codes.length ? `<div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;">${groupCodes(codes).map(cg =>
+        `<div><div style="font-size:10px;color:var(--fg-subtle);margin-bottom:5px;">${esc(cg.group)}</div>
+         <div style="display:flex;gap:6px;flex-wrap:wrap;">${cg.codes.map(c => `<span class="code-chip" title="${esc(c)}">${esc(codeLabel(c))}</span>`).join("")}</div></div>`).join("")}</div>` : ""}
+      ${d.disposition === "held" && codes.length ? `
+        <div style="margin-top:16px;background:var(--bg-inset);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-size:11px;color:var(--yellow-200);font-weight:600;letter-spacing:0.04em;"><i class="fa-solid fa-list-check" style="margin-right:6px;"></i>TO RESOLVE THIS HOLD</span>
+            ${checklist.some(it => it.status === "resolved") ? `<span style="font-size:11px;color:${checklist.every(it => it.status === "resolved") ? "#3BB443" : "var(--fg-subtle)"};">${checklist.filter(it => it.status === "resolved").length} of ${checklist.length} resolved${checklist.every(it => it.status === "resolved") ? " — press Approve to re-evaluate" : ""}</span>` : ""}
+          </div>
+          ${checklist.map((it,i) => {
+            if (it.status === "resolved") return `<div style="display:flex;gap:10px;align-items:baseline;font-size:12.5px;line-height:19px;color:var(--fg-subtle);padding:3px 0;">
+              <span style="color:#3BB443;"><i class="fa-solid fa-check" style="font-size:11px;"></i></span>
+              <span style="flex:1;"><b style="color:#3BB443;">${esc(it.label)}.</b> ${esc(it.action)}</span></div>`;
+            const tgt = it.target;
+            const fieldsNote = it.fields?.length ? `<span class="mono" style="color:var(--yellow-200);font-size:11px;"> → ${it.fields.map(esc).join(", ")}</span>` : "";
+            return `<div style="display:flex;gap:10px;align-items:baseline;font-size:12.5px;line-height:19px;color:var(--fg-muted);padding:3px 0;">
+            <span style="color:var(--fg-subtle);">${i+1}.</span>
+            <span style="flex:1;"><b style="color:var(--fg);">${esc(it.label)}.</b> ${esc(it.action)}${fieldsNote}</span>
+            ${tgt ? `<button class="ghostbtn" style="border:1px solid var(--yellow-200);color:var(--yellow-200);border-radius:9999px;padding:2px 12px;white-space:nowrap;flex-shrink:0;" onclick="jumpToFix('${esc(tgt.kind)}','${esc(tgt.field ?? "")}')">Fix it →</button>`
+                  : `<span style="font-size:11px;color:var(--fg-subtle);white-space:nowrap;">not fixable by editing</span>`}</div>`;
+          }).join("")}
+          <div style="font-size:11.5px;color:var(--fg-subtle);margin-top:8px;">Use the Review panel below, then press <b>Approve — re-evaluate</b>. Nothing posts until every gate passes. <b>Rejecting is also a valid resolution</b> — an invoice that shouldn't be paid (unknown supplier, no PO, suspected duplicate) gets a reject with a reason, not a forced approval.</div>
+        </div>` : ""}
+    </div>`;
+  const g = gates?.payload;
+  $("#d-currency").innerHTML = g ? `
+    <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-default);padding:12px 16px;margin-bottom:20px;">
+      <div style="display:flex;align-items:baseline;gap:8px;"><span style="font-size:11px;color:var(--fg-subtle);">Currency</span>
+        <span style="font-size:13px;font-weight:500;">${esc(g.currency?.code ?? "Not stated")}</span>
+        <span style="font-size:11px;color:var(--fg-subtle);">via ${esc(g.currency?.source ?? "—")}</span></div>
+      <div style="display:flex;align-items:baseline;gap:8px;min-width:0;"><span style="font-size:11px;color:var(--fg-subtle);">Reconciliation</span>
+        <span class="mono" style="font-size:12px;color:var(--fg-muted);">${esc(g.reconciliation ?? "—")}</span></div>
+      <div style="display:flex;align-items:baseline;gap:8px;"><span style="font-size:11px;color:var(--fg-subtle);white-space:nowrap;">PO refs in document</span>
+        <span class="mono" style="font-size:12px;color:var(--fg-muted);">${esc((g.po_references ?? []).join(", ") || "none")}</span></div>
+    </div>` : "";
+  // fields: prefer review endpoint (has review_status) for held runs
+  let fields = fieldsEv ? Object.entries(fieldsEv.payload).map(([k,v]) => ({field:k, status:v.status, raw:v.raw, method:v.read_method, checks:v.checks, evidence:v.evidence, review:"not_reviewed"})) : [];
+  if (review){
+    fields = Object.entries(review.fields).map(([k,v]) => ({field:k, status:v.status, raw:v.raw_value, method:v.read_method, checks:v.checks, evidence:v.evidence, review:v.review_status, problem:v.problem ?? null}));
+  }
+  renderDocument(runId, fields);  // async — fills #d-doc when geometry arrives
+  $("#d-fields").innerHTML = fields.length ? `
+    <section class="card" style="margin-bottom:20px;">
+      <button class="trace-btn" onclick="toggleAdv()"><span style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;">Advanced diagnosis<span style="font-size:11px;color:var(--fg-subtle);font-weight:400;">per-field extraction evidence and verification checks — for auditors and the curious</span></span><i id="adv-chev" class="fa-solid fa-chevron-down" style="color:var(--fg-subtle);font-size:12px;"></i></button>
+      <div id="adv-body" class="hide" style="border-top:1px solid var(--border-hair);">
+      <div style="padding:8px 16px;font-size:11px;color:var(--fg-subtle);"><span style="color:#3BB443;">✓ pass</span> code-verified · <span style="color:#FF4F36;">✕ fail</span> error caught · <span style="color:#696D77;">— not evaluated</span> nothing to check · <span style="color:#E6A516;">👁 scan</span> needs your attestation · click a row to locate it on the document</div>
+      <div class="thead" style="grid-template-columns:minmax(130px,170px) 76px minmax(110px,1fr) 84px minmax(180px,260px) 78px;"><span>Field</span><span>Found?</span><span>Value on the document</span><span>Read by</span><span>Verification</span><span>Review</span></div>
+      ${fields.map(f => `
+        <div class="field-row clickable" data-field="${esc(f.field)}" title="${f.problem ? esc(f.problem.why) : "Click to see where this sits on the document"}" style="${f.problem ? "background:rgba(230,165,22,0.06);" : ""}">
+          <span class="mono" style="font-size:12px;color:${f.problem ? "var(--yellow-200)" : "inherit"};">${f.problem ? '<i class="fa-solid fa-triangle-exclamation" style="font-size:10px;margin-right:5px;"></i>' : ""}${esc(f.field)}</span>
+          <span style="font-size:12px;color:${f.status === "selected" ? "#B7BCC9" : f.status === "missing" ? "#696D77" : "#E6A516"};">${esc(f.status)}</span>
+          <span class="mono" style="font-size:12px;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(f.raw ?? "—")}</span>
+          <span class="mono" style="font-size:11px;color:var(--fg-subtle);">${esc(f.method ?? "—")}</span>
+          <span style="display:flex;gap:5px;flex-wrap:wrap;">${["source_match","role_check","normalization"].map(k => checkChip(k, f.checks?.[k])).join("")}</span>
+          <span style="font-size:11.5px;color:${f.review === "corrected" ? "#39ACFF" : f.review === "attested" ? "#3BB443" : "#696D77"};display:flex;align-items:center;gap:5px;">
+            ${f.review === "corrected" ? '<i class="fa-solid fa-pen" style="font-size:10px;"></i>corrected' : f.review === "attested" ? '<i class="fa-solid fa-check" style="font-size:10px;"></i>attested' : ""}</span>
+        </div>`).join("")}
+      </div>
+    </section>` : "";
+  document.querySelectorAll("#d-fields .field-row").forEach(row =>
+    row.addEventListener("click", () => flashEvidence(row.dataset.field)));
+  renderReview(review);
+  const evs = fmtEvents(d.events);
+  $("#d-trace").innerHTML = evs.length ? `
+    <section class="card">
+      <button class="trace-btn" onclick="toggleTrace()"><span style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;">Stage trace<span style="font-size:11px;color:var(--fg-subtle);font-weight:400;">${evs.length} events</span></span><i id="trace-chev" class="fa-solid fa-chevron-up" style="color:var(--fg-subtle);font-size:12px;"></i></button>
+      <div id="trace-body" style="border-top:1px solid var(--border-hair);padding:6px 0;">
+        ${evs.map(ev => `
+          <div class="ev-row">
+            <span class="mono" style="font-size:11px;color:var(--fg-subtle);">${ev.seq}</span>
+            <span class="mono" style="font-size:10.5px;font-weight:500;letter-spacing:0.03em;color:${stageColor(ev.stage)};">${esc(ev.stage)}</span>
+            <span style="${ev.mono ? "font-family:var(--font-mono);font-size:12px;" : "font-size:12.5px;"}color:#B7BCC9;overflow-wrap:anywhere;">${esc(ev.text)}${ev.model ? `<span class="mono" style="display:inline-flex;gap:12px;margin-left:10px;font-size:11px;color:var(--fg-subtle);"><span>${esc(ev.model)}</span><span>${esc(ev.latency)}</span><span>${esc(ev.tokens)}</span></span>` : ""}</span>
+          </div>`).join("")}
+      </div>
+    </section>` : "";
+  show("run");
+}
+function toggleAdv(){
+  const b = $("#adv-body"); const open = !b.classList.contains("hide");
+  b.classList.toggle("hide", open);
+  $("#adv-chev").className = "fa-solid fa-chevron-" + (open ? "down" : "up");
+}
+function toggleTrace(){
+  const b = $("#trace-body"); const open = !b.classList.contains("hide");
+  b.classList.toggle("hide", open);
+  $("#trace-chev").className = "fa-solid fa-chevron-" + (open ? "down" : "up");
+}
+
+// ---------- document viewer with evidence overlays ----------
+const STATE_COLORS = {
+  verified: {bd:"#3BB443", bg:"rgba(59,180,67,0.14)", tag:"#2c7a32"},
+  failed:   {bd:"#FF4F36", bg:"rgba(255,79,54,0.16)", tag:"#a03325"},
+  corrected:{bd:"#39ACFF", bg:"rgba(57,172,255,0.16)", tag:"#1d6fae"},
+  scan:     {bd:"#E6A516", bg:"rgba(230,165,22,0.16)", tag:"#9a7010"},
+};
+function fieldBoxState(f){
+  if (f.review === "corrected") return "corrected";
+  if (f.problem) return f.method === "llm_vision" ? "scan" : "failed";
+  if (f.method === "llm_vision") return "scan";
+  const c = f.checks ?? {};
+  if (c.source_match === "fail" || c.role_check === "fail" || c.normalization === "fail") return "failed";
+  return "verified";
+}
+async function renderDocument(runId, fields){
+  const el = $("#d-doc");
+  el.innerHTML = "";
+  let doc;
+  try { doc = await fetch(`/api/runs/${encodeURIComponent(runId)}/document`).then(r => r.ok ? r.json() : null); }
+  catch(e){ return; }
+  if (!doc || !doc.pages.length) return;
+  const blockById = Object.fromEntries(doc.blocks.map(b => [b.block_id, b]));
+  // one numbered overlay entry per field that has located evidence
+  const marks = fields.map(f => {
+    const b = f.evidence && blockById[f.evidence.block_id];
+    return b ? {f, b} : null;
+  }).filter(Boolean).map((m, i) => ({...m, n: i + 1}));
+  el.innerHTML = `
+    <section class="card" style="margin-bottom:20px;">
+      <div class="card-hd"><h3>Your document — where each value sits</h3>
+        <span style="font-size:11px;color:var(--fg-subtle);">
+          <span style="color:#3BB443;">■</span> verified ·
+          <span style="color:#FF4F36;">■</span> check failed ·
+          <span style="color:#E6A516;">■</span> scan — attest ·
+          <span style="color:#39ACFF;">■</span> corrected · click a box or a table row to cross-highlight
+        </span></div>
+      <div style="max-height:560px;overflow:auto;padding:18px;background:var(--bg-inset);display:flex;flex-direction:column;gap:16px;align-items:center;">
+        ${doc.pages.map(pg => `
+          <div class="pdfpage" data-page="${pg.page}" style="width:min(680px,100%);aspect-ratio:${pg.width}/${pg.height};">
+            <img src="/api/runs/${encodeURIComponent(runId)}/page/${pg.page}" alt="page ${pg.page}" loading="lazy">
+            ${marks.filter(m => m.b.page === pg.page).map(m => {
+              const s = STATE_COLORS[fieldBoxState(m.f)];
+              const padX = 3, padY = 2.5;  // PDF points of breathing room
+              const boxH = Math.max(m.b.bottom - m.b.top + 2 * padY, 11);
+              const l = Math.max(0, (m.b.x0 - padX) / pg.width * 100), tP = Math.max(0, (m.b.top - padY) / pg.height * 100);
+              const w = Math.min(100 - l, (m.b.x1 - m.b.x0 + 2 * padX) / pg.width * 100);
+              const h = Math.min(100 - tP, boxH / pg.height * 100);
+              return `<div class="evbox" data-field="${esc(m.f.field)}" title="${esc(m.f.field)}: ${esc(m.f.raw ?? "")}"
+                style="left:${l}%;top:${tP}%;width:${w}%;height:${h}%;border-color:${s.bd};background:${s.bg};">
+                <span class="evnum" style="background:${s.tag};">${m.n}</span></div>`;
+            }).join("")}
+          </div>`).join("")}
+      </div>
+      ${marks.length ? `<div class="evlegend">${marks.map(m => {
+          const st = fieldBoxState(m.f);
+          const s = STATE_COLORS[st];
+          const stateText = st === "failed" && m.f.problem && !["fail"].some(x => Object.values(m.f.checks ?? {}).includes(x))
+            ? "blocked by a rule — see review panel"
+            : {verified:"verified", failed:"check failed — needs fixing", scan:"scan-read — attest below", corrected:"corrected by reviewer"}[st];
+          return `<div class="li" data-field="${esc(m.f.field)}">
+            <span class="num" style="background:${s.tag};">${m.n}</span>
+            <span class="mono" style="color:var(--fg);">${esc(m.f.field)}</span>
+            <span class="mono" style="color:var(--fg-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc(m.f.raw ?? "")}</span>
+            <span style="color:${s.bd};font-size:11px;margin-left:auto;white-space:nowrap;">${stateText}</span>
+          </div>`;
+        }).join("")}</div>` : `<div style="padding:12px 16px;font-size:12px;color:var(--fg-subtle);">No located evidence to highlight${fields.some(f => f.method === "llm_vision") ? " — fields were read from a scan; use the page image above to check them before attesting" : ""}.</div>`}
+    </section>`;
+  el.querySelectorAll(".evlegend .li").forEach(li => li.addEventListener("click", () => flashEvidence(li.dataset.field)));
+  el.querySelectorAll(".evbox").forEach(box => box.addEventListener("click", e => {
+    e.stopPropagation();
+    const name = box.dataset.field;
+    const input = document.querySelector(`.rvw-field[data-field="${CSS.escape(name)}"]`);
+    const row = document.querySelector(`#d-fields .field-row[data-field="${CSS.escape(name)}"]`);
+    const target = input ?? row;
+    if (target){ target.scrollIntoView({behavior:"smooth", block:"center"}); if (input) input.focus(); }
+    if (row){ row.style.background = "#26313D"; setTimeout(() => row.style.background = "", 1200); }
+  }));
+}
+function flashEvidence(name){
+  const box = document.querySelector(`.evbox[data-field="${CSS.escape(name)}"]`);
+  if (!box){ toast("info", "No located evidence", name + " was not found on the document (missing or scan-read)"); return; }
+  box.closest(".pdfpage").scrollIntoView({behavior:"smooth", block:"center"});
+  box.classList.remove("flash"); void box.offsetWidth; box.classList.add("flash");
+}
+
+// ---------- review ----------
+function renderReview(rv){
+  const el = $("#d-review");
+  if (!rv){ el.innerHTML = ""; state.review = null; return; }
+  state.review = rv;
+  const editable = Object.entries(rv.fields)
+    .map(([name, v]) => [name, v, v.problem ?? (rv.diagnosis ? null : (fieldNeedsInput(name, v) ? {why:"Needs review.", expected:"", suggestion:null} : null))])
+    .sort((a, b) => (b[2] ? 1 : 0) - (a[2] ? 1 : 0));
+  const attestable = editable.filter(([,v]) => v.read_method === "llm_vision" && v.status === "selected" && v.review_status !== "attested");
+  const posById = Object.fromEntries((state.pos ?? []).map(p => [p.po_id, p]));
+  el.innerHTML = `
+    <section class="card" style="border-color:var(--yellow-200);margin-bottom:20px;">
+      <div class="card-hd" style="flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <i class="fa-solid fa-user-pen" style="color:var(--yellow-200);font-size:13px;"></i><h3>Review</h3>
+          <span class="mono" style="font-size:11px;color:var(--fg-subtle);">revision ${rv.revision_seq} · every action creates a new immutable revision</span>
+        </div>
+        <span style="font-size:11px;color:var(--fg-subtle);">Approve re-evaluates against fresh state — it may still hold or reject</span>
+      </div>
+      <div style="padding:12px 16px 0;font-size:12.5px;color:var(--fg-muted);">Fields marked <i class="fa-solid fa-triangle-exclamation" style="color:var(--yellow-200);font-size:10px;"></i> <b style="color:var(--yellow-200);">amber</b> are the ones blocking approval — they are sorted to the top. Edit a value and press its <b>Correct</b> button, pick a PO on the right if one is needed, attest any scan-read fields — then <b>Approve</b>. (Or use the <b style="color:var(--yellow-200);">Fix it →</b> buttons in the checklist above to jump straight to each problem.)</div>
+      <div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px;align-items:start;">
+        <div>
+          <div style="font-size:11px;color:var(--fg-subtle);margin-bottom:8px;">Correct field values</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            ${editable.map(([name, v, problem]) => `
+              <div class="rvw-row ${problem ? "problem" : ""}" style="${problem ? "border-left:3px solid var(--yellow-200);padding:6px 0 8px 8px;margin-left:-11px;" : ""}">
+                <div style="display:grid;grid-template-columns:170px minmax(0,1fr) 76px;gap:10px;align-items:center;">
+                  <span class="mono" style="font-size:12px;color:${problem ? "var(--yellow-200)" : "var(--fg-muted)"};">${problem ? '<i class="fa-solid fa-triangle-exclamation" style="font-size:10px;margin-right:5px;"></i>' : ""}${esc(name)}</span>
+                  <input class="rvw-input rvw-field" data-field="${esc(name)}" data-orig="${esc(v.raw_value ?? "")}" value="${esc(v.raw_value ?? "")}" placeholder="${esc(v.status)}" ${problem ? 'style="border-color:rgba(230,165,22,0.55);"' : ""}>
+                  <button class="btn-primary rvw-save" data-field="${esc(name)}" style="height:32px;padding:0;opacity:.35;cursor:default;" disabled>Correct</button>
+                </div>
+                ${problem ? `<div style="grid-column:1/-1;margin:6px 0 0 180px;font-size:11.5px;line-height:16px;color:var(--fg-muted);">
+                  ${esc(problem.why)}${problem.expected ? ` <span style="color:var(--fg-subtle);">Accepted: ${esc(problem.expected)}.</span>` : ""}
+                  ${problem.suggestion ? `<button class="ghostbtn use-suggestion" data-field="${esc(name)}" data-value="${esc(problem.suggestion)}" style="border:1px solid #39ACFF;color:#39ACFF;border-radius:9999px;padding:2px 10px;margin-left:8px;">Use "${esc(problem.suggestion)}"</button>` : ""}
+                  ${name === "supplier_name" && (problem.codes ?? []).includes("VENDOR_UNKNOWN") && v.raw_value ? `
+                    <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                      <button class="ghostbtn" style="border:1px solid var(--accent);color:var(--accent);border-radius:9999px;padding:3px 12px;" onclick="onboardVendor()"><i class="fa-solid fa-building-circle-check" style="margin-right:6px;font-size:10px;"></i>Onboard "${esc(v.raw_value)}" as a new approved vendor</button>
+                      <span style="color:var(--fg-subtle);">procurement action · recorded on this run's audit trail · then re-evaluate</span>
+                    </div>` : ""}
+                </div>` : ""}
+              </div>`).join("")}
+          </div>
+          ${attestable.length ? `
+            <div style="font-size:11px;color:var(--fg-subtle);margin:18px 0 8px;">Attest scan-read fields — the only way scan evidence becomes trusted</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${attestable.map(([name, v]) => `
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius-default);padding:9px 12px;">
+                  <input type="checkbox" class="rvw-attest" value="${esc(name)}" style="accent-color:#1463B8;width:14px;height:14px;cursor:pointer;">
+                  <span class="mono" style="font-size:12px;">${esc(name)}</span>
+                  <span class="mono" style="font-size:12px;color:var(--fg-muted);">${esc(v.raw_value ?? "")}</span>
+                  <span style="font-size:11px;color:var(--fg-subtle);margin-left:auto;">read by llm_vision · not attested</span>
+                </label>`).join("")}
+            </div>
+            <button class="btn-primary" style="margin-top:10px;height:32px;" onclick="attestChecked()">Attest checked</button>` : ""}
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--fg-subtle);margin-bottom:8px;">PO candidates — suggestions, never auto-selected</div>
+          <div style="display:flex;flex-direction:column;gap:8px;" id="po-cands">
+            ${(!rv.po_candidates.length && (rv.diagnosis ? rv.diagnosis.vendor_resolved : true)) ? `
+              <div style="background:var(--bg-inset);border:1px dashed var(--border-strong);border-radius:8px;padding:12px;">
+                <div style="font-size:12px;color:var(--fg-muted);margin-bottom:8px;">This supplier has no open purchase orders. If procurement has authorized this spend, create the PO here (recorded on the audit trail), then re-evaluate.</div>
+                <div style="display:grid;grid-template-columns:1fr 90px 1fr auto;gap:8px;align-items:center;">
+                  <input class="rvw-input" id="npo-id" placeholder="PO id, e.g. BPXPO-00536" value="${esc((rv.fields.po_reference?.raw_value ?? "").match(/[A-Z0-9]*PO-[A-Za-z0-9]+/)?.[0] ?? "")}">
+                  <input class="rvw-input" id="npo-cur" placeholder="USD" value="${esc(rv.context?.currency?.code ?? (rv.fields.currency?.review_status === "corrected" ? rv.fields.currency.raw_value : ""))}">
+                  <input class="rvw-input" id="npo-amt" placeholder="Authorized amount, e.g. 10000.00">
+                  <button class="btn-primary" style="height:32px;" onclick="createPo()">Create PO</button>
+                </div>
+              </div>` : ""}
+            ${rv.po_candidates.length ? rv.po_candidates.map(pc => {
+              const consumed = posById[pc.po_id]?.consumed_minor ?? 0;
+              return `<div class="pocard" data-po="${esc(pc.po_id)}">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <span class="mono" style="font-size:13px;font-weight:500;">${esc(pc.po_id)}</span>
+                  <i class="fa-regular fa-circle" style="color:#696D77;font-size:13px;"></i>
+                </div>
+                <div class="mono" style="font-size:12px;color:var(--fg-muted);margin-top:4px;">${fmt(pc.amount_minor - consumed, pc.currency)} remaining of ${fmt(pc.amount_minor, pc.currency)}</div>
+              </div>`;
+            }).join("") : ((rv.diagnosis && !rv.diagnosis.vendor_resolved) ? '<div style="font-size:12px;color:var(--fg-subtle);">No candidates yet — the supplier must be in the vendor master first (fix supplier_name on the left, or onboard it).</div>' : "")}
+          </div>
+          <div style="margin-top:18px;display:flex;flex-direction:column;gap:10px;">
+            <button class="btn-primary" style="width:100%;" onclick="approveRun()"><i class="fa-solid fa-circle-check"></i>Approve — re-evaluate</button>
+            <div style="display:flex;gap:8px;">
+              <input class="rvw-input" id="reject-reason" placeholder="Rejection reason" style="font-family:var(--font-sans);flex:1;">
+              <button class="btn-danger" onclick="rejectRun()">Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  document.querySelectorAll(".rvw-save").forEach(b => b.addEventListener("click", () => { if (!b.disabled) correctField(b.dataset.field); }));
+  document.querySelectorAll(".use-suggestion").forEach(btn => btn.addEventListener("click", () => {
+    const input = document.querySelector(`.rvw-field[data-field="${CSS.escape(btn.dataset.field)}"]`);
+    input.value = btn.dataset.value;
+    input.dispatchEvent(new Event("input"));
+    input.focus();
+  }));
+  document.querySelectorAll(".rvw-field").forEach(inp => inp.addEventListener("input", () => {
+    const btn = document.querySelector(`.rvw-save[data-field="${CSS.escape(inp.dataset.field)}"]`);
+    const changed = inp.value.trim() !== (inp.dataset.orig ?? "").trim() && inp.value.trim() !== "";
+    btn.disabled = !changed;
+    btn.style.opacity = changed ? "1" : ".35";
+    btn.style.cursor = changed ? "pointer" : "default";
+  }));
+  document.querySelectorAll("#po-cands .pocard").forEach(c => c.addEventListener("click", () => pickPo(c)));
+}
+async function reviewPost(path, body){
+  const res = await fetch(`/api/runs/${encodeURIComponent(state.activeRunId)}/review/${path}`, {
+    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const data = await res.json();
+  if (!res.ok){ toast("danger", "Review error", typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)); throw new Error("review"); }
+  return data;
+}
+async function correctField(name){
+  const input = document.querySelector(`.rvw-field[data-field="${CSS.escape(name)}"]`);
+  const value = input.value.trim(); if (!value) return;
+  const d = await reviewPost("correct", {field:name, value, expected_seq: state.review.revision_seq});
+  toast("info", `Field corrected — revision ${d.revision_seq}`, `${name} → ${value} · immutable revision created`);
+  openRun(state.activeRunId);
+}
+async function pickPo(cardEl){
+  const po = cardEl.dataset.po;
+  const d = await reviewPost("correct", {field:"po_reference", value:po, expected_seq: state.review.revision_seq});
+  toast("info", `PO ${po} selected — revision ${d.revision_seq}`, "Recorded as a reviewer correction");
+  openRun(state.activeRunId);
+}
+async function attestChecked(){
+  const names = [...document.querySelectorAll(".rvw-attest:checked")].map(c => c.value);
+  if (!names.length){ toast("warning", "Nothing checked", "Tick the scan-read fields you verified against the page"); return; }
+  const d = await reviewPost("attest", {fields:names, expected_seq: state.review.revision_seq});
+  toast("info", `Attested — revision ${d.revision_seq}`, names.join(", ") + " marked trusted");
+  openRun(state.activeRunId);
+}
+async function approveRun(){
+  const d = await reviewPost("approve", {idempotency_key: crypto.randomUUID()});
+  if (d.idempotent_replay){ toast("info", "Already decided", "Idempotent replay — no second posting"); return; }
+  const ok = d.posted;
+  toast(ok ? "success" : "warning", ok ? "Approved — posted" : "Re-evaluated: still " + (d.route === "REJECT" ? "rejected" : "held"), d.explanation ?? "");
+  await refresh();
+  openRun(d.run_id);
+}
+async function rejectRun(){
+  const reason = $("#reject-reason").value.trim();
+  if (!reason){ toast("warning", "Rejection needs a reason", "Enter a short reason — it goes in the audit log"); return; }
+  const d = await reviewPost("reject", {idempotency_key: crypto.randomUUID(), reason});
+  toast("danger", "Rejected by reviewer", "Nothing posted · decision recorded");
+  await refresh();
+  if (d.run_id) openRun(d.run_id); else goHome();
+}
+async function deleteRun(runId){
+  if (!confirm("Delete this run and its audit trail? Runs that posted money are protected and will refuse.")) return;
+  const res = await fetch("/api/runs/" + encodeURIComponent(runId), {method:"DELETE"});
+  const data = await res.json();
+  if (!res.ok){ toast("warning", "Not deleted", typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)); return; }
+  toast("info", "Run deleted", runId);
+  if (state.activeRunId === runId) goHome(); else refresh();
+}
+
+async function onboardVendor(){
+  const input = document.querySelector('.rvw-field[data-field="supplier_name"]');
+  const name = input.value.trim(); if (!name) return;
+  const res = await fetch("/api/vendors", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({name, run_id: state.activeRunId})});
+  const data = await res.json();
+  if (!res.ok){ toast("warning", "Not onboarded", typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)); return; }
+  toast("success", `"${name}" onboarded`, `${data.supplier_id} · approved · recorded on the audit trail. Now pick or create a PO, then re-evaluate.`);
+  openRun(state.activeRunId);
+}
+async function createPo(){
+  const po_id = $("#npo-id").value.trim(), currency = $("#npo-cur").value.trim(), amount = $("#npo-amt").value.trim();
+  if (!po_id || !currency || !amount){ toast("warning", "PO needs id, currency and amount", ""); return; }
+  const supplier_id = state.review?.po_supplier_id;
+  const res = await fetch("/api/pos", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({po_id, supplier_id, currency, amount, run_id: state.activeRunId})});
+  const data = await res.json();
+  if (!res.ok){ toast("warning", "PO not created", typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)); return; }
+  toast("success", `${po_id} created`, `${fmt(data.amount_minor, data.currency)} · open · recorded on the audit trail`);
+  await openRun(state.activeRunId);
+  // auto-select the new PO as the invoice's reference
+  const card = document.querySelector(`#po-cands .pocard[data-po="${CSS.escape(po_id)}"]`);
+  if (card) pickPo(card);
+}
+async function addVendorFromTab(){
+  const name = $("#nv-name").value.trim(), country = $("#nv-country").value.trim();
+  if (!name) return;
+  const res = await fetch("/api/vendors", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, country})});
+  const data = await res.json();
+  if (!res.ok){ toast("warning", "Not added", typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)); return; }
+  toast("success", "Vendor added", data.supplier_id); showVendors();
+}
+async function addPoFromTab(){
+  const body = {po_id:$("#np-id").value.trim(), supplier_id:$("#np-sup").value, currency:$("#np-cur").value.trim(), amount:$("#np-amt").value.trim()};
+  if (!body.po_id || !body.supplier_id || !body.currency || !body.amount){ toast("warning", "All PO fields required", ""); return; }
+  const res = await fetch("/api/pos", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  const data = await res.json();
+  if (!res.ok){ toast("warning", "Not added", typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)); return; }
+  toast("success", "PO added", body.po_id); showPos();
+}
+
+async function resetDemo(){
+  await fetch("/api/admin/reset", {method:"POST"});
+  toast("info", "Workspace reset", "POs, runs and revisions restored to seed state");
+  goHome();
+}
+
+// ---------- toast ----------
+let toastTimer;
+function toast(tone, title, sub){
+  const colors = {success:"#3BB443", warning:"#E6A516", danger:"#FF4F36", info:"#39ACFF"};
+  const t = $("#toast");
+  t.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start;">
+    <i class="fa-solid fa-circle-info" style="color:${colors[tone] ?? colors.info};font-size:14px;margin-top:2px;"></i>
+    <div style="min-width:0;"><div style="font-size:13px;font-weight:600;">${esc(title)}</div>
+    <div style="font-size:12px;color:var(--fg-muted);margin-top:2px;">${esc(sub ?? "")}</div></div></div>`;
+  t.style.display = "block";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.display = "none", 6000);
+}
+
+refresh();
+loadSamples();
+setInterval(() => { if (state.view === "dashboard") refresh(); }, 6000);
+</script>
+</body>
+</html>

@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/bicycle-product-design-system-2f8c56ca-c2f5-45a7-bec9-84af7e179693/colors_and_type.css">
+  <link rel="stylesheet" href="_ds/bicycle-product-design-system-2f8c56ca-c2f5-45a7-bec9-84af7e179693/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="_ds/bicycle-product-design-system-2f8c56ca-c2f5-45a7-bec9-84af7e179693/_ds_bundle.js"></script>
+  <style>
+    html,body{margin:0;padding:0;background:#15202B;}
+    a{color:#39ACFF;text-decoration:none;} a:hover{color:#6CBAF2;}
+    @keyframes bcy-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    input::placeholder{color:#696D77;}
+  </style>
+</helmet>
+<div style="display:flex;flex-direction:row;height:100vh;background:var(--bg);font-family:var(--font-sans);color:var(--fg);overflow:hidden;">
+  <nav style="width:72px;height:100%;background:#0F1822;display:flex;flex-direction:column;flex-shrink:0;">
+    <div style="display:flex;align-items:center;justify-content:center;padding:14px 0 10px;">
+      <span title="AP decisioning" style="width:36px;height:36px;border-radius:8px;background:rgba(0,193,159,0.14);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:16px;">
+        <i class="fa-solid fa-file-invoice-dollar"></i>
+      </span>
+    </div>
+    <div style="height:1px;background:#212B36;margin:0 14px;"></div>
+    <sc-for list="{{ railItems }}" as="ri" hint-placeholder-count="4">
+      <div style="{{ ri.style }}" style-hover="color:#F4F4F4">
+        <span style="{{ ri.tileStyle }}"><i class="{{ ri.icon }}"></i></span>{{ ri.label }}
+      </div>
+    </sc-for>
+    <div style="flex:1;"></div>
+    <div style="height:1px;background:#212B36;margin:0 14px;"></div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;color:#8D8F92;font-size:10px;font-weight:500;text-align:center;cursor:pointer;" style-hover="color:#F4F4F4">
+      <span style="width:40px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:18px;"><i class="fa-solid fa-circle-question"></i></span>Help
+    </div>
+  </nav>
+  <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
+    <header style="display:flex;align-items:center;gap:14px;height:60px;padding:0 16px;flex-shrink:0;background:#0F1822;border-bottom:1px solid #212B36;">
+      <div style="display:inline-flex;align-items:center;gap:8px;background:#212B36;border-radius:8px;height:36px;padding:0 12px 0 10px;font-size:14px;color:#F4F4F4;white-space:nowrap;">
+        <i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent);font-size:14px;"></i>
+        <span>AP decisioning</span>
+      </div>
+      <span style="font-size:16px;font-weight:700;">{{ navLabel }}</span>
+      <div style="flex:1;"></div>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:#212B36;border-radius:8px;height:36px;padding:0 10px 0 6px;font-size:14px;white-space:nowrap;">
+        <span style="width:26px;height:26px;border-radius:6px;background:#3B444D;color:#B7BCC9;display:inline-flex;align-items:center;justify-content:center;font-size:12px;"><i class="fa-solid fa-user"></i></span>
+        <span style="color:#B7BCC9;">AP clerk</span>
+      </div>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:#212B36;border-radius:8px;height:36px;padding:0 10px;font-size:14px;color:#F4F4F4;white-space:nowrap;">
+        <i class="fa-solid fa-briefcase" style="color:#8D8F92;font-size:13px;"></i>
+        <span>Finance demo</span>
+      </div>
+    </header>
+    <main style="flex:1;overflow-y:auto;padding:24px 32px 48px;">
+
+      <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+        <div style="max-width:1160px;margin:0 auto;">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:20px;">
+            <h1 style="margin:0;font-size:20px;font-weight:500;letter-spacing:-0.01em;">Invoices</h1>
+            <button onClick="{{ resetDemo }}" style="background:none;border:none;cursor:pointer;color:var(--fg-subtle);font-family:var(--font-sans);font-size:12px;padding:4px 6px;" style-hover="color:#B7BCC9">reset demo workspace</button>
+          </div>
+          <div onClick="{{ startDemoRun }}" style="border:1.5px dashed var(--border-strong);border-radius:var(--radius-large);background:var(--bg-raised);padding:36px 24px;text-align:center;cursor:pointer;margin-bottom:24px;" style-hover="border-color:#39ACFF;background:#232F3B">
+            <i class="fa-solid fa-file-arrow-up" style="font-size:22px;color:var(--fg-muted);"></i>
+            <div style="margin-top:10px;font-size:14px;color:var(--fg);">Drop a vendor invoice PDF</div>
+            <div style="margin-top:4px;font-size:12px;color:var(--fg-subtle);">One file per run · the pipeline reads, verifies and decides — every step logged</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:24px;align-items:start;">
+            <section style="background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-large);box-shadow:var(--shadow-card);overflow:hidden;">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border-hair);">
+                <h3 style="margin:0;font-size:14px;font-weight:500;">Runs</h3>
+                <span style="font-size:12px;color:var(--fg-subtle);">newest first · review runs marked <i class="fa-solid fa-rotate-left" style="font-size:11px;"></i></span>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(110px,1fr) 64px minmax(100px,168px) 58px;gap:8px;padding:8px 16px;background:var(--surface-tint);font-size:11px;color:var(--fg-subtle);">
+                <span>File</span><span>Run</span><span>Disposition</span><span style="text-align:right;">Time</span>
+              </div>
+              <sc-for list="{{ runRows }}" as="run" hint-placeholder-count="5">
+                <div onClick="{{ run.open }}" style="display:grid;grid-template-columns:minmax(110px,1fr) 64px minmax(100px,168px) 58px;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--border-hair);cursor:pointer;" style-hover="background:#26313D">
+                  <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                    <i class="{{ run.fileIcon }}" style="color:{{ run.fileIconColor }};font-size:12px;width:14px;text-align:center;"></i>
+                    <span style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ run.filename }}</span>
+                    <sc-if value="{{ run.isReview }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size:10px;color:var(--fg-subtle);border:1px solid var(--border);border-radius:var(--radius-full);padding:1px 7px;white-space:nowrap;">review</span>
+                    </sc-if>
+                  </div>
+                  <span style="font-size:12px;color:{{ run.statusColor }};">{{ run.statusLabel }}</span>
+                  <span style="min-width:0;overflow:hidden;"><span style="{{ run.pillStyle }}"><i class="{{ run.pillIcon }}" style="font-size:10px;"></i>{{ run.dispLabel }}</span></span>
+                  <span style="font-size:12px;color:var(--fg-subtle);text-align:right;font-variant-numeric:tabular-nums;">{{ run.time }}</span>
+                </div>
+              </sc-for>
+            </section>
+            <section style="display:flex;flex-direction:column;gap:16px;">
+              <sc-for list="{{ poGroups }}" as="g" hint-placeholder-count="2">
+                <div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-large);box-shadow:var(--shadow-card);padding:14px 16px;">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+                    <h3 style="margin:0;font-size:13px;font-weight:500;">Purchase orders · {{ g.currency }}</h3>
+                    <span style="font-size:11px;color:var(--fg-subtle);">amounts in {{ g.currency }} only</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:12px;">
+                    <sc-for list="{{ g.pos }}" as="po" hint-placeholder-count="2">
+                      <div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                          <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                            <span style="font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;">{{ po.po_id }}</span>
+                            <span style="font-size:12px;color:var(--fg-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ po.supplier }}</span>
+                          </div>
+                          <span style="{{ po.statusStyle }}">{{ po.status }}</span>
+                        </div>
+                        <div style="height:6px;border-radius:var(--radius-full);background:var(--neutral-dark-600);margin:7px 0 5px;overflow:hidden;">
+                          <div style="{{ po.barStyle }}"></div>
+                        </div>
+                        <div style="font-size:12px;color:var(--fg-muted);font-variant-numeric:tabular-nums;">{{ po.consumedFmt }} of {{ po.baseFmt }} · {{ po.pct }}%</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </section>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isLive }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1160px;margin:0 auto;">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px;">
+            <h1 style="margin:0;font-size:20px;font-weight:500;letter-spacing:-0.01em;">Processing {{ liveFilename }}</h1>
+          </div>
+          <p style="margin:0 0 24px;font-size:13px;color:var(--fg-subtle);">Stages reflect pipeline events — nothing below is animated for show</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+            <sc-for list="{{ liveStages }}" as="st" hint-placeholder-count="6">
+              <div style="{{ st.cardStyle }}">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <i class="{{ st.icon }}" style="{{ st.iconStyle }}"></i>
+                  <span style="font-size:12px;font-weight:600;letter-spacing:0.02em;color:{{ st.labelColor }};">{{ st.label }}</span>
+                </div>
+                <div style="margin-top:8px;font-size:11.5px;line-height:15px;color:var(--fg-subtle);min-height:30px;">{{ st.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{ liveDone }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:24px;background:var(--bg-raised);border:1px solid var(--border);border-left:3px solid var(--green-400);border-radius:var(--radius-default);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+              <div>
+                <span style="{{ livePillStyle }}"><i class="fa-regular fa-circle-check" style="font-size:10px;"></i>{{ liveDispLabel }}</span>
+                <div style="margin-top:8px;font-size:13px;color:var(--fg-muted);max-width:720px;">{{ liveExplanation }}</div>
+              </div>
+              <x-import component-from-global-scope="BicycleProductDesignSystem_2f8c56.Button" variant="primary" size="md" icon-right="circle-right" on-click="{{ openLiveRun }}" hint-size="auto,36px">View run</x-import>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isRun }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1160px;margin:0 auto;">
+          <button onClick="{{ goHome }}" style="background:none;border:none;cursor:pointer;color:var(--fg-subtle);font-family:var(--font-sans);font-size:12px;padding:0 0 14px;display:flex;align-items:center;gap:6px;" style-hover="color:#B7BCC9"><i class="fa-solid fa-arrow-left" style="font-size:11px;"></i>All runs</button>
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+            <h1 style="margin:0;font-size:20px;font-weight:500;letter-spacing:-0.01em;white-space:nowrap;">{{ d.filename }}</h1>
+            <span style="font-size:12px;color:var(--fg-subtle);font-variant-numeric:tabular-nums;">{{ d.runId }} · {{ d.kindLabel }} · {{ d.time }}</span>
+          </div>
+
+          <div style="{{ d.bannerStyle }}">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="{{ d.pillStyle }}"><i class="{{ d.pillIcon }}" style="font-size:10px;"></i>{{ d.dispLabel }}</span>
+              <span style="font-size:11px;color:var(--fg-subtle);white-space:nowrap;">decision_mode: {{ d.decisionMode }}</span>
+            </div>
+            <p style="margin:10px 0 0;font-size:15px;line-height:23px;color:var(--fg);max-width:860px;text-wrap:pretty;">{{ d.explanation }}</p>
+            <sc-if value="{{ d.hasCodes }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;">
+                <sc-for list="{{ d.codeGroups }}" as="cg" hint-placeholder-count="1">
+                  <div>
+                    <div style="font-size:10px;color:var(--fg-subtle);margin-bottom:5px;">{{ cg.group }}</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                      <sc-for list="{{ cg.codes }}" as="c" hint-placeholder-count="1">
+                        <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-muted);background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius-s);padding:3px 8px;">{{ c }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ d.hasCurrency }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-default);padding:12px 16px;margin-bottom:20px;">
+              <div style="display:flex;align-items:baseline;gap:8px;">
+                <span style="font-size:11px;color:var(--fg-subtle);">Currency</span>
+                <span style="font-size:13px;font-weight:500;">{{ d.curCode }}</span>
+                <span style="font-size:11px;color:var(--fg-subtle);white-space:nowrap;">via {{ d.curHow }}</span>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:8px;min-width:0;">
+                <span style="font-size:11px;color:var(--fg-subtle);">Reconciliation</span>
+                <span style="font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);font-variant-numeric:tabular-nums;">{{ d.curArith }}</span>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:8px;">
+                <span style="font-size:11px;color:var(--fg-subtle);white-space:nowrap;">PO refs in document</span>
+                <span style="font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);">{{ d.curRefs }}</span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ d.hasFields }}" hint-placeholder-val="{{ false }}">
+            <section style="background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-large);box-shadow:var(--shadow-card);overflow:hidden;margin-bottom:20px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border-hair);">
+                <h3 style="margin:0;font-size:14px;font-weight:500;">Field evidence</h3>
+                <span style="font-size:11px;color:var(--fg-subtle);">pass = code-verified · fail = error caught · not evaluated = nothing to check · scan = needs human attestation</span>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(130px,170px) 76px minmax(110px,1fr) 84px minmax(180px,260px) 78px;gap:8px;padding:8px 16px;background:var(--surface-tint);font-size:11px;color:var(--fg-subtle);">
+                <span>Field</span><span>Status</span><span>Raw value</span><span>Read by</span><span>Checks</span><span>Review</span>
+              </div>
+              <sc-for list="{{ d.fields }}" as="f" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:minmax(130px,170px) 76px minmax(110px,1fr) 84px minmax(180px,260px) 78px;gap:8px;align-items:center;padding:9px 16px;border-top:1px solid var(--border-hair);">
+                  <span style="font-family:var(--font-mono);font-size:12px;">{{ f.name }}</span>
+                  <span style="font-size:12px;color:{{ f.statusColor }};">{{ f.status }}</span>
+                  <span style="font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.raw }}</span>
+                  <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);">{{ f.method }}</span>
+                  <span style="display:flex;gap:5px;flex-wrap:wrap;">
+                    <sc-for list="{{ f.checks }}" as="ck" hint-placeholder-count="3">
+                      <span title="{{ ck.tip }}" style="{{ ck.style }}"><i class="{{ ck.icon }}" style="font-size:9px;"></i>{{ ck.label }}</span>
+                    </sc-for>
+                  </span>
+                  <span style="font-size:11.5px;color:{{ f.reviewColor }};display:flex;align-items:center;gap:5px;"><sc-if value="{{ f.reviewIcon }}" hint-placeholder-val="{{ false }}"><i class="{{ f.reviewIcon }}" style="font-size:10px;"></i></sc-if>{{ f.reviewMark }}</span>
+                </div>
+              </sc-for>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{ showReview }}" hint-placeholder-val="{{ false }}">
+            <section style="background:var(--bg-raised);border:1px solid var(--yellow-200);border-radius:var(--radius-large);box-shadow:var(--shadow-card);overflow:hidden;margin-bottom:20px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border-hair);flex-wrap:wrap;gap:8px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <i class="fa-solid fa-user-pen" style="color:var(--yellow-200);font-size:13px;"></i>
+                  <h3 style="margin:0;font-size:14px;font-weight:500;">Review</h3>
+                  <span style="font-size:11px;color:var(--fg-subtle);font-variant-numeric:tabular-nums;">revision {{ revisionSeq }} · every action creates a new immutable revision</span>
+                </div>
+                <span style="font-size:11px;color:var(--fg-subtle);">Approve re-evaluates against fresh state — it may still hold or reject</span>
+              </div>
+              <div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px;align-items:start;">
+                <div>
+                  <div style="font-size:11px;color:var(--fg-subtle);margin-bottom:8px;">Correct field values</div>
+                  <div style="display:flex;flex-direction:column;gap:8px;">
+                    <sc-for list="{{ reviewRows }}" as="rf" hint-placeholder-count="4">
+                      <div style="display:grid;grid-template-columns:170px minmax(0,1fr) 76px;gap:10px;align-items:center;">
+                        <span style="font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);">{{ rf.name }}</span>
+                        <input key="{{ rf.key }}" default-value="{{ rf.value }}" onChange="{{ rf.onEdit }}" style="background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius-default);color:var(--fg);font-family:var(--font-mono);font-size:12px;padding:7px 10px;outline:none;min-width:0;" style-focus="border-color:#39ACFF;border-width:1px" />
+                        <button onClick="{{ rf.onSave }}" disabled="{{ rf.saveDisabled }}" style="{{ rf.saveStyle }}">Correct</button>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ hasAttest }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11px;color:var(--fg-subtle);margin:18px 0 8px;">Attest scan-read fields <span style="color:var(--fg-subtle);">— the only way scan evidence becomes trusted</span></div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                      <sc-for list="{{ attestRows }}" as="af" hint-placeholder-count="1">
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius-default);padding:9px 12px;">
+                          <input type="checkbox" checked="{{ af.checked }}" onChange="{{ af.onToggle }}" style="accent-color:#1463B8;width:14px;height:14px;cursor:pointer;" />
+                          <span style="font-family:var(--font-mono);font-size:12px;">{{ af.name }}</span>
+                          <span style="font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);">{{ af.value }}</span>
+                          <span style="font-size:11px;color:var(--fg-subtle);margin-left:auto;">read by llm_vision · {{ af.stateLabel }}</span>
+                        </label>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:var(--fg-subtle);margin-bottom:8px;">PO candidates <span>— suggestions, never auto-selected</span></div>
+                  <div style="display:flex;flex-direction:column;gap:8px;">
+                    <sc-for list="{{ poCandidates }}" as="pc" hint-placeholder-count="2">
+                      <div onClick="{{ pc.onPick }}" style="{{ pc.cardStyle }}">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                          <span style="font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;">{{ pc.po_id }}</span>
+                          <i class="{{ pc.radioIcon }}" style="color:{{ pc.radioColor }};font-size:13px;"></i>
+                        </div>
+                        <div style="font-size:11.5px;color:var(--fg-subtle);margin-top:2px;">{{ pc.supplier }}</div>
+                        <div style="font-size:12px;color:var(--fg-muted);margin-top:4px;font-variant-numeric:tabular-nums;">{{ pc.remainFmt }} remaining of {{ pc.baseFmt }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="margin-top:18px;display:flex;flex-direction:column;gap:10px;">
+                    <x-import component-from-global-scope="BicycleProductDesignSystem_2f8c56.Button" variant="primary" size="md" icon="circle-check" on-click="{{ approveRun }}" hint-size="100%,36px">Approve — re-evaluate</x-import>
+                    <div style="display:flex;gap:8px;">
+                      <input default-value="" onChange="{{ onRejectReason }}" placeholder="Rejection reason" style="flex:1;background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius-default);color:var(--fg);font-family:var(--font-sans);font-size:12px;padding:7px 10px;outline:none;min-width:0;" style-focus="border-color:#39ACFF" />
+                      <x-import component-from-global-scope="BicycleProductDesignSystem_2f8c56.Button" variant="danger" size="md" on-click="{{ rejectRun }}" hint-size="auto,34px">Reject</x-import>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{ d.hasEvents }}" hint-placeholder-val="{{ false }}">
+            <section style="background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-large);box-shadow:var(--shadow-card);overflow:hidden;">
+              <button onClick="{{ toggleTrace }}" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;padding:14px 16px;font-family:var(--font-sans);color:var(--fg);" style-hover="background:#26313D">
+                <span style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;">Stage trace<span style="font-size:11px;color:var(--fg-subtle);font-weight:400;">{{ d.eventCount }} events</span></span>
+                <i class="{{ traceChevron }}" style="color:var(--fg-subtle);font-size:12px;"></i>
+              </button>
+              <sc-if value="{{ traceOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="border-top:1px solid var(--border-hair);padding:6px 0;">
+                  <sc-for list="{{ d.events }}" as="ev" hint-placeholder-count="6">
+                    <div style="display:grid;grid-template-columns:36px 78px minmax(0,1fr);gap:10px;padding:7px 16px;align-items:baseline;">
+                      <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);font-variant-numeric:tabular-nums;">{{ ev.seq }}</span>
+                      <span style="{{ ev.stageStyle }}">{{ ev.stage }}</span>
+                      <span style="{{ ev.textStyle }}">{{ ev.text }}<sc-if value="{{ ev.model }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;gap:12px;margin-left:10px;font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);font-variant-numeric:tabular-nums;"><span>{{ ev.model }}</span><span>{{ ev.latency }}</span><span>{{ ev.tokens }}</span></span></sc-if></span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </section>
+          </sc-if>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;bottom:24px;right:24px;z-index:50;width:380px;">
+      <x-import component-from-global-scope="BicycleProductDesignSystem_2f8c56.Toast" tone="{{ toastTone }}" title="{{ toastTitle }}" sub="{{ toastSub }}" on-close="{{ closeToast }}" hint-size="380px,64px"></x-import>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;traceExpanded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;stageDelayMs&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:650,&quot;min&quot;:200,&quot;max&quot;:1500,&quot;step&quot;:50,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Demo&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = this.initialState();
+  }
+  initialState() {
+    return {
+      view: 'dashboard', activeRunId: null,
+      pos: [
+        { po_id: 'PO-4471', supplier: 'Acme Industrial Supply', currency: 'USD', amount_minor: 3000000, consumed_minor: 2400000, status: 'open' },
+        { po_id: 'PO-4585', supplier: 'Acme Industrial Supply', currency: 'USD', amount_minor: 820000, consumed_minor: 0, status: 'open' },
+        { po_id: 'PO-4522', supplier: 'Nordwind Logistik GmbH', currency: 'EUR', amount_minor: 1250000, consumed_minor: 415000, status: 'open' },
+        { po_id: 'PO-4310', supplier: 'Kyoto Precision KK', currency: 'JPY', amount_minor: 1850000, consumed_minor: 1850000, status: 'closed' },
+      ],
+      runs: [
+        { run_id: 'run_9f2e', kind: 'intake', filename: 'acme-inv-2214.pdf', run_status: 'completed', disposition: 'HOLD_REVIEW', time: '09:41:22' },
+        { run_id: 'run_77b0', kind: 'intake', filename: 'kyoto-inv-0092.pdf', run_status: 'completed', disposition: 'REJECT', time: '09:36:05' },
+        { run_id: 'run_6e42', kind: 'review', filename: 'acme-inv-2190.pdf', run_status: 'completed', disposition: 'REVIEWER_APPROVED', time: '09:28:47' },
+        { run_id: 'run_6e41', kind: 'intake', filename: 'acme-inv-2190.pdf', run_status: 'completed', disposition: 'HOLD_REVIEW', time: '09:12:03' },
+        { run_id: 'run_a3c1', kind: 'intake', filename: 'nordwind-7781.pdf', run_status: 'completed', disposition: 'AUTO_APPROVE', time: '08:55:19' },
+        { run_id: 'run_4c88', kind: 'intake', filename: 'acme-inv-2185.pdf', run_status: 'completed', disposition: 'APPROVE_WITH_EXCEPTION', time: '08:41:52' },
+        { run_id: 'run_5a09', kind: 'intake', filename: 'scan-receipt-jul.pdf', run_status: 'failed', disposition: null, time: '08:07:30' },
+      ],
+      details: this.seedDetails(),
+      resolved: { run_6e41: true },
+      revisionSeq: 4, drafts: {}, corrections: {}, attested: {}, selectedPo: null, rejectReason: '',
+      traceOpen: this.props.traceExpanded !== undefined ? !!this.props.traceExpanded : true,
+      live: null, toast: null,
+    };
+  }
+  seedDetails() {
+    const acmeFields = (dateAttested) => [
+      { field: 'vendor_name', status: 'selected', raw: 'Acme Industrial Supply', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+      { field: 'invoice_number', status: 'selected', raw: 'INV-2214', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+      { field: 'invoice_date', status: 'selected', raw: '2026-09-08', method: 'llm_vision', checks: { source_match: 'not_applicable', role_check: 'not_applicable', normalization: 'not_applicable' }, review: dateAttested ? 'attested' : 'not_reviewed' },
+      { field: 'currency_code', status: 'selected', raw: 'USD', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+      { field: 'invoice_gross_total', status: 'selected', raw: '8,000.00', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+      { field: 'po_reference', status: 'selected', raw: 'PO-4471', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+      { field: 'tax_amount', status: 'missing', raw: '—', method: '—', checks: { source_match: 'not_evaluated', role_check: 'not_evaluated', normalization: 'not_evaluated' }, review: 'not_reviewed' },
+    ];
+    return {
+      run_9f2e: {
+        decision_mode: 'system',
+        explanation: 'Held for review. This invoice would bring approved billing to USD 32,000.00 against a USD 30,000.00 PO. The USD 2,000.00 overage exceeds the USD 1,500.00 exception limit. No amount was added to the approved ledger. Next: verify the invoice or amend the PO.',
+        codes: [{ code: 'REVIEW_REQUIRED_SCAN', group: 'Extraction' }, { code: 'PO_BUDGET_EXCEEDED', group: 'Policy limits' }],
+        currency: { code: 'USD', how: 'field currency_code', arith: 'A 24,000.00 + I 8,000.00 = C 32,000.00 · B 30,000.00 · D 2,000.00 > T_exc 1,500.00', refs: 'PO-4471' },
+        fields: acmeFields(false),
+        events: [
+          { seq: 1, stage: 'INGEST', text: 'received acme-inv-2214.pdf · sha256 9b3f…41e2 · 214 kB' },
+          { seq: 2, stage: 'INGEST', text: 'parsed 1 page · 42 text blocks · scan region detected p1' },
+          { seq: 3, stage: 'EXTRACT', text: 'model attempt 1 of 1', model: 'claude-sonnet-4-5', latency: '2.9 s', tokens: '3,412 in / 486 out' },
+          { seq: 4, stage: 'EXTRACT', text: '7 fields proposed · 6 selected · 1 missing (tax_amount)' },
+          { seq: 5, stage: 'VALIDATE', text: 'source_match 5 pass · role_check 5 pass · normalization 5 pass · invoice_date is scan evidence — attestation required' },
+          { seq: 6, stage: 'MATCH', text: 'PO-4471 matched: same vendor, same currency, open · 1 other candidate (PO-4585)' },
+          { seq: 7, stage: 'DECIDE', text: 'budget_check[v1]: A=24000.00, I=8000.00, C=32000.00, B=30000.00, D=2000.00 > T_exc=1500.00', mono: true },
+          { seq: 8, stage: 'DECIDE', text: 'route=HOLD_REVIEW · nothing posted to the approved ledger' },
+        ],
+      },
+      run_77b0: {
+        decision_mode: 'system',
+        explanation: 'Rejected. Invoice number KY-0092 was already posted by an earlier run (duplicate invoice number, same vendor). No amount was added to the approved ledger. Next: no action — duplicates are final.',
+        codes: [{ code: 'DUP_INVOICE_NO', group: 'Business conflicts' }],
+        currency: { code: 'JPY', how: 'field currency_code', arith: 'duplicate — reconciliation not reached', refs: 'PO-4310' },
+        fields: [
+          { field: 'vendor_name', status: 'selected', raw: 'Kyoto Precision KK', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+          { field: 'invoice_number', status: 'selected', raw: 'KY-0092', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+          { field: 'invoice_gross_total', status: 'selected', raw: '¥462,000', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+        ],
+        events: [
+          { seq: 1, stage: 'INGEST', text: 'received kyoto-inv-0092.pdf · sha256 77aa…09c3 · 96 kB' },
+          { seq: 2, stage: 'EXTRACT', text: 'model attempt 1 of 1', model: 'claude-sonnet-4-5', latency: '2.1 s', tokens: '2,208 in / 301 out' },
+          { seq: 3, stage: 'VALIDATE', text: 'all selected fields pass' },
+          { seq: 4, stage: 'MATCH', text: 'invoice_number KY-0092 already posted in run_2b11 — duplicate fingerprint confirmed', mono: false },
+          { seq: 5, stage: 'DECIDE', text: 'route=REJECT · duplicate is a certain violation — no human review path' },
+        ],
+      },
+      run_6e42: {
+        decision_mode: 'reviewer',
+        explanation: 'Approved by reviewer. After the gross total was corrected to USD 1,350.00 (revision 6), re-evaluation posted USD 1,350.00 to PO-4471. Approved billing is now USD 24,000.00 of USD 30,000.00.',
+        codes: [],
+        currency: { code: 'USD', how: 'field currency_code', arith: 'A 22,650.00 + I 1,350.00 = C 24,000.00 ≤ B 30,000.00', refs: 'PO-4471' },
+        fields: [
+          { field: 'invoice_gross_total', status: 'selected', raw: '1,350.00', method: 'reviewer', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'corrected' },
+          { field: 'invoice_date', status: 'selected', raw: '2026-09-05', method: 'llm_vision', checks: { source_match: 'not_applicable', role_check: 'not_applicable', normalization: 'not_applicable' }, review: 'attested' },
+        ],
+        events: [
+          { seq: 1, stage: 'DECIDE', text: 'reviewer clerk@finance approved at revision 6 · re-evaluated against fresh state' },
+          { seq: 2, stage: 'DECIDE', text: 'budget_check[v1]: A=22650.00, I=1350.00, C=24000.00, B=30000.00 — within budget', mono: true },
+          { seq: 3, stage: 'COMMIT', text: 'posted USD 1,350.00 to PO-4471 · ledger revision 7' },
+        ],
+      },
+      run_6e41: {
+        decision_mode: 'system',
+        explanation: 'Held for review. The stated gross total USD 13,500.00 did not match the document line-item sum USD 1,350.00. No amount was posted. Resolved by run_6e42 (reviewer corrected the total).',
+        codes: [{ code: 'MATH_MISMATCH', group: 'Extraction' }],
+        currency: { code: 'USD', how: 'field currency_code', arith: 'line items 1,350.00 ≠ stated total 13,500.00', refs: 'PO-4471' },
+        fields: [
+          { field: 'invoice_gross_total', status: 'ambiguous', raw: '13,500.00', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'fail' }, review: 'not_reviewed' },
+        ],
+        events: [
+          { seq: 1, stage: 'VALIDATE', text: 'normalization fail: stated total does not equal line-item sum' },
+          { seq: 2, stage: 'DECIDE', text: 'route=HOLD_REVIEW · nothing posted' },
+        ],
+      },
+      run_a3c1: {
+        decision_mode: 'system',
+        explanation: 'Auto-approved. All gates passed. Posted EUR 1,150.00 to PO-4522, bringing approved billing to EUR 4,150.00 of EUR 12,500.00. No exceptions logged.',
+        codes: [],
+        currency: { code: 'EUR', how: 'field currency_code', arith: 'A 3,000.00 + I 1,150.00 = C 4,150.00 ≤ B 12,500.00', refs: 'PO-4522' },
+        fields: [
+          { field: 'vendor_name', status: 'selected', raw: 'Nordwind Logistik GmbH', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+          { field: 'invoice_number', status: 'selected', raw: 'NW-7781', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+          { field: 'invoice_gross_total', status: 'selected', raw: '1.150,00 €', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+          { field: 'po_reference', status: 'selected', raw: 'PO-4522', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+        ],
+        events: [
+          { seq: 1, stage: 'INGEST', text: 'received nordwind-7781.pdf · sha256 c210…88f4 · 132 kB' },
+          { seq: 2, stage: 'EXTRACT', text: 'model attempt 1 of 1', model: 'claude-sonnet-4-5', latency: '2.4 s', tokens: '2,845 in / 362 out' },
+          { seq: 3, stage: 'VALIDATE', text: 'all checks pass · EU number format normalized (1.150,00 → 1150.00)' },
+          { seq: 4, stage: 'MATCH', text: 'PO-4522 matched: same vendor, same currency, open' },
+          { seq: 5, stage: 'DECIDE', text: 'budget_check[v1]: A=3000.00, I=1150.00, C=4150.00, B=12500.00 — within budget', mono: true },
+          { seq: 6, stage: 'COMMIT', text: 'posted EUR 1,150.00 to PO-4522' },
+        ],
+      },
+      run_4c88: {
+        decision_mode: 'system',
+        explanation: 'Approved with exception. Posted USD 5,350.00 to PO-4471. The USD 350.00 overage against the remaining budget is within the USD 1,500.00 authorized band — logged as VARIANCE_EXCEPTION for month-end audit.',
+        codes: [{ code: 'VARIANCE_EXCEPTION', group: 'Policy limits' }],
+        currency: { code: 'USD', how: 'document context', arith: 'D 350.00 ≤ T_exc 1,500.00 — exception band', refs: 'PO-4471' },
+        fields: [
+          { field: 'currency_code', status: 'ambiguous', raw: 'not stated — inferred from PO + address', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+        ],
+        events: [
+          { seq: 1, stage: 'DECIDE', text: 'variance within authorized band — posted with exception log', mono: false },
+        ],
+      },
+      run_5a09: {
+        decision_mode: 'system',
+        explanation: 'Run failed. The PDF could not be parsed (encrypted stream, zero extractable pages). No business decision was made — this is an operational failure, not a rejection. Next: re-export the PDF and upload again.',
+        codes: [{ code: 'UNSUPPORTED_DOCUMENT_TYPE', group: 'Extraction' }],
+        currency: null,
+        fields: [],
+        events: [
+          { seq: 1, stage: 'INGEST', text: 'received scan-receipt-jul.pdf · 1.8 MB' },
+          { seq: 2, stage: 'INGEST', text: 'parse error: encrypted content stream · 0 pages readable · run aborted' },
+        ],
+      },
+    };
+  }
+  fmt(minor, code) {
+    const exp = { JPY: 0, BHD: 3 }[code] !== undefined ? { JPY: 0, BHD: 3 }[code] : 2;
+    const neg = minor < 0; let s = String(Math.abs(minor)).padStart(exp + 1, '0');
+    const intPart = exp ? s.slice(0, -exp) : s, frac = exp ? s.slice(-exp) : '';
+    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return code + ' ' + (neg ? '-' : '') + grouped + (exp ? '.' + frac : '');
+  }
+  bare(minor, code) { return this.fmt(minor, code).slice(code.length + 1); }
+  parseMinor(str, code) {
+    const exp = { JPY: 0, BHD: 3 }[code] !== undefined ? { JPY: 0, BHD: 3 }[code] : 2;
+    const clean = String(str).replace(/[^0-9.]/g, ''); if (!clean) return null;
+    const [i, f = ''] = clean.split('.');
+    const m = parseInt(i || '0', 10) * Math.pow(10, exp) + parseInt((f + '000').slice(0, exp) || '0', 10);
+    return isNaN(m) ? null : m;
+  }
+  dispMeta(disp, runStatus) {
+    if (runStatus === 'failed') return { label: 'Run failed', fg: '#DA7F8F', bg: 'rgba(218,127,143,0.12)', bd: 'rgba(218,127,143,0.35)', icon: 'fa-solid fa-triangle-exclamation' };
+    const M = {
+      AUTO_APPROVE: { label: 'Auto-approved', fg: '#3BB443', bg: 'rgba(59,180,67,0.12)', bd: 'rgba(59,180,67,0.4)', icon: 'fa-regular fa-circle-check' },
+      APPROVE_WITH_EXCEPTION: { label: 'Approved · exception', fg: '#3BB443', bg: 'rgba(59,180,67,0.12)', bd: 'rgba(230,165,22,0.5)', icon: 'fa-regular fa-flag' },
+      HOLD_REVIEW: { label: 'Held for review', fg: '#E6A516', bg: 'rgba(230,165,22,0.12)', bd: 'rgba(230,165,22,0.4)', icon: 'fa-regular fa-hand' },
+      REJECT: { label: 'Rejected', fg: '#FF4F36', bg: 'rgba(255,79,54,0.12)', bd: 'rgba(255,79,54,0.4)', icon: 'fa-regular fa-circle-xmark' },
+      REVIEWER_APPROVED: { label: 'Approved by reviewer', fg: '#3BB443', bg: 'rgba(59,180,67,0.12)', bd: 'rgba(59,180,67,0.4)', icon: 'fa-solid fa-user-check' },
+      REVIEWER_REJECTED: { label: 'Rejected by reviewer', fg: '#FF4F36', bg: 'rgba(255,79,54,0.12)', bd: 'rgba(255,79,54,0.4)', icon: 'fa-solid fa-user-xmark' },
+    };
+    return M[disp] || { label: disp || '—', fg: '#B7BCC9', bg: 'rgba(108,132,157,0.12)', bd: '#3B444D', icon: 'fa-regular fa-circle' };
+  }
+  pillStyle(m) {
+    return { display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 500, color: m.fg, background: m.bg, border: '1px solid ' + m.bd, borderRadius: '9999px', padding: '3px 10px', whiteSpace: 'nowrap' };
+  }
+  checkChip(k, state) {
+    const labels = { source_match: 'source', role_check: 'role', normalization: 'norm' };
+    const S = {
+      pass: { icon: 'fa-solid fa-check', color: '#3BB443', bg: 'rgba(59,180,67,0.1)', bd: 'rgba(59,180,67,0.3)', tip: k + ': pass — code-verified' },
+      fail: { icon: 'fa-solid fa-xmark', color: '#FF4F36', bg: 'rgba(255,79,54,0.1)', bd: 'rgba(255,79,54,0.3)', tip: k + ': fail — caught an error' },
+      not_evaluated: { icon: 'fa-solid fa-minus', color: '#696D77', bg: 'transparent', bd: '#3B444D', tip: k + ': not evaluated — no value to check (not a failure)' },
+      not_applicable: { icon: 'fa-regular fa-eye', color: '#E6A516', bg: 'rgba(230,165,22,0.08)', bd: 'rgba(230,165,22,0.3)', tip: k + ': scan evidence — needs human attestation' },
+    };
+    const s = S[state] || S.not_evaluated;
+    return { label: labels[k] || k, icon: s.icon, tip: s.tip, style: { display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: s.color, background: s.bg, border: '1px solid ' + s.bd, borderRadius: '4px', padding: '2px 6px', whiteSpace: 'nowrap' } };
+  }
+  stageColor(stage) {
+    return { INGEST: '#8D8F92', EXTRACT: '#39ACFF', VALIDATE: '#A186F0', MATCH: '#6CBAF2', DECIDE: '#E6A516', COMMIT: '#3BB443' }[stage] || '#8D8F92';
+  }
+  showToast(tone, title, sub) { this.setState({ toast: true, toastTone: tone, toastTitle: title, toastSub: sub }); clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast: false }), 5000); }
+  now() { const d = new Date(); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':'); }
+  startDemoRun() {
+    const delay = this.props.stageDelayMs != null ? Number(this.props.stageDelayMs) : 650;
+    const notes = {
+      INGEST: 'received nordwind-7802.pdf · 118 kB · 1 page, 38 blocks',
+      EXTRACT: 'claude-sonnet-4-5 · 2.6 s · 2,732 in / 344 out · 6 fields selected',
+      VALIDATE: 'source_match, role_check, normalization: all pass',
+      MATCH: 'PO-4522 matched — same vendor, same currency, open',
+      DECIDE: 'budget_check[v1]: A=4150.00, I=2300.00, C=6450.00 ≤ B=12500.00',
+      COMMIT: 'posted EUR 2,300.00 to PO-4522',
+    };
+    const stages = ['INGEST', 'EXTRACT', 'VALIDATE', 'MATCH', 'DECIDE', 'COMMIT'].map(id => ({ id, status: 'pending', note: '' }));
+    this.setState({ view: 'live', live: { filename: 'nordwind-7802.pdf', stages, done: false } });
+    let i = 0;
+    const step = () => {
+      const live = this.state.live; if (!live) return;
+      const st = live.stages.map((s, j) => j === i ? { ...s, status: 'running' } : s);
+      this.setState({ live: { ...live, stages: st } });
+      this._lt = setTimeout(() => {
+        const live2 = this.state.live; if (!live2) return;
+        const st2 = live2.stages.map((s, j) => j === i ? { ...s, status: 'done', note: notes[s.id] } : s);
+        const doneAll = i === 5;
+        this.setState({ live: { ...live2, stages: st2, done: doneAll } });
+        if (doneAll) this.finishDemoRun(); else { i++; step(); }
+      }, delay + (i === 1 ? delay * 1.6 : 0));
+    };
+    step();
+  }
+  finishDemoRun() {
+    const rid = 'run_c4d1';
+    const pos = this.state.pos.map(p => p.po_id === 'PO-4522' ? { ...p, consumed_minor: p.consumed_minor + 230000 } : p);
+    const run = { run_id: rid, kind: 'intake', filename: 'nordwind-7802.pdf', run_status: 'completed', disposition: 'AUTO_APPROVE', time: this.now() };
+    const detail = {
+      decision_mode: 'system',
+      explanation: 'Auto-approved. All gates passed. Posted EUR 2,300.00 to PO-4522, bringing approved billing to EUR 6,450.00 of EUR 12,500.00. No exceptions logged.',
+      codes: [],
+      currency: { code: 'EUR', how: 'field currency_code', arith: 'A 4,150.00 + I 2,300.00 = C 6,450.00 ≤ B 12,500.00', refs: 'PO-4522' },
+      fields: [
+        { field: 'vendor_name', status: 'selected', raw: 'Nordwind Logistik GmbH', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+        { field: 'invoice_number', status: 'selected', raw: 'NW-7802', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+        { field: 'invoice_gross_total', status: 'selected', raw: '2.300,00 €', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+        { field: 'po_reference', status: 'selected', raw: 'PO-4522', method: 'llm_text', checks: { source_match: 'pass', role_check: 'pass', normalization: 'pass' }, review: 'not_reviewed' },
+      ],
+      events: [
+        { seq: 1, stage: 'INGEST', text: 'received nordwind-7802.pdf · sha256 e491…2ab7 · 118 kB' },
+        { seq: 2, stage: 'EXTRACT', text: 'model attempt 1 of 1', model: 'claude-sonnet-4-5', latency: '2.6 s', tokens: '2,732 in / 344 out' },
+        { seq: 3, stage: 'VALIDATE', text: 'all checks pass' },
+        { seq: 4, stage: 'MATCH', text: 'PO-4522 matched: same vendor, same currency, open' },
+        { seq: 5, stage: 'DECIDE', text: 'budget_check[v1]: A=4150.00, I=2300.00, C=6450.00, B=12500.00 — within budget', mono: true },
+        { seq: 6, stage: 'COMMIT', text: 'posted EUR 2,300.00 to PO-4522' },
+      ],
+    };
+    this.setState({
+      pos, runs: [run, ...this.state.runs.filter(r => r.run_id !== rid)],
+      details: { ...this.state.details, [rid]: detail },
+    });
+  }
+  reevaluate() {
+    const s = this.state;
+    const fields = s.details.run_9f2e.fields;
+    const unattested = fields.filter(f => f.method === 'llm_vision' && f.review !== 'attested' && !s.attested[f.field]);
+    const rid = 'run_' + Math.random().toString(16).slice(2, 6);
+    const time = this.now();
+    const mkRun = (disp) => ({ run_id: rid, kind: 'review', filename: 'acme-inv-2214.pdf', run_status: 'completed', disposition: disp, time });
+    if (unattested.length) {
+      const detail = {
+        decision_mode: 'reviewer',
+        explanation: 'Still held. Scan-read field ' + unattested.map(f => f.field).join(', ') + ' has not been attested — scan evidence only becomes trusted through attestation. Nothing was posted. Next: attest the field, then approve again.',
+        codes: [{ code: 'REVIEW_REQUIRED_SCAN', group: 'Extraction' }],
+        currency: s.details.run_9f2e.currency,
+        fields: this.mergedFields(),
+        events: [
+          { seq: 1, stage: 'DECIDE', text: 'reviewer clerk@finance approved at revision ' + s.revisionSeq + ' · re-evaluated against fresh state' },
+          { seq: 2, stage: 'DECIDE', text: 'gate: unattested scan evidence (' + unattested.map(f => f.field).join(', ') + ') → route=HOLD_REVIEW' },
+        ],
+      };
+      this.setState({ runs: [mkRun('HOLD_REVIEW'), ...s.runs], details: { ...s.details, [rid]: detail }, activeRunId: rid, view: 'run' });
+      this.showToast('warning', 'Re-evaluated: still held', 'Scan evidence needs attestation before approval');
+      return;
+    }
+    const poId = s.selectedPo || 'PO-4471';
+    const po = s.pos.find(p => p.po_id === poId);
+    const corrTotal = s.corrections.invoice_gross_total;
+    const I = corrTotal != null ? this.parseMinor(corrTotal, 'USD') : 800000;
+    const A = po.consumed_minor, B = po.amount_minor, C = A + I, D = C - B, T = 150000;
+    const arith = 'A ' + this.bare(A, 'USD') + ' + I ' + this.bare(I, 'USD') + ' = C ' + this.bare(C, 'USD') + (D > 0 ? ' · B ' + this.bare(B, 'USD') + ' · D ' + this.bare(D, 'USD') + (D > T ? ' > ' : ' ≤ ') + 'T_exc ' + this.bare(T, 'USD') : ' ≤ B ' + this.bare(B, 'USD'));
+    const budgetLine = { seq: 2, stage: 'DECIDE', text: 'budget_check[v1]: A=' + (A / 100).toFixed(2) + ', I=' + (I / 100).toFixed(2) + ', C=' + (C / 100).toFixed(2) + ', B=' + (B / 100).toFixed(2) + (D > 0 ? ', D=' + (D / 100).toFixed(2) + (D > T ? ' > ' : ' <= ') + 'T_exc=1500.00' : ' — within budget'), mono: true };
+    const baseEvents = [{ seq: 1, stage: 'DECIDE', text: 'reviewer clerk@finance approved at revision ' + s.revisionSeq + ' · re-evaluated against ' + poId }];
+    if (D <= T) {
+      const exception = D > 0;
+      const detail = {
+        decision_mode: 'reviewer',
+        explanation: 'Approved by reviewer. Re-evaluation posted ' + this.fmt(I, 'USD') + ' to ' + poId + ', bringing approved billing to ' + this.fmt(C, 'USD') + ' of ' + this.fmt(B, 'USD') + '.' + (exception ? ' The ' + this.fmt(D, 'USD') + ' overage is within the USD 1,500.00 authorized band — logged as VARIANCE_EXCEPTION.' : ''),
+        codes: exception ? [{ code: 'VARIANCE_EXCEPTION', group: 'Policy limits' }] : [],
+        currency: { code: 'USD', how: 'field currency_code', arith, refs: poId },
+        fields: this.mergedFields(),
+        events: [...baseEvents, budgetLine, { seq: 3, stage: 'COMMIT', text: 'posted ' + this.fmt(I, 'USD') + ' to ' + poId + ' · ledger updated' }],
+      };
+      const pos = s.pos.map(p => p.po_id === poId ? { ...p, consumed_minor: p.consumed_minor + I } : p);
+      this.setState({ pos, runs: [mkRun('REVIEWER_APPROVED'), ...s.runs], details: { ...s.details, [rid]: detail }, resolved: { ...s.resolved, run_9f2e: true }, activeRunId: rid, view: 'run' });
+      this.showToast('success', 'Approved — ' + this.fmt(I, 'USD') + ' posted to ' + poId, exception ? 'Variance exception logged' : 'All gates passed on re-evaluation');
+    } else {
+      const detail = {
+        decision_mode: 'reviewer',
+        explanation: 'Still held. This invoice would bring approved billing to ' + this.fmt(C, 'USD') + ' against a ' + this.fmt(B, 'USD') + ' PO. The ' + this.fmt(D, 'USD') + ' overage exceeds the USD 1,500.00 exception limit. Nothing was posted. Next: correct the total, pick a PO with budget, or amend the PO.',
+        codes: [{ code: 'PO_BUDGET_EXCEEDED', group: 'Policy limits' }],
+        currency: { code: 'USD', how: 'field currency_code', arith, refs: poId },
+        fields: this.mergedFields(),
+        events: [...baseEvents, budgetLine, { seq: 3, stage: 'DECIDE', text: 'route=HOLD_REVIEW · nothing posted' }],
+      };
+      this.setState({ runs: [mkRun('HOLD_REVIEW'), ...s.runs], details: { ...s.details, [rid]: detail }, activeRunId: rid, view: 'run' });
+      this.showToast('warning', 'Re-evaluated: still held', 'Budget still exceeded — the decision is honest, not an error');
+    }
+  }
+  mergedFields() {
+    const s = this.state;
+    return s.details.run_9f2e.fields.map(f => {
+      let out = { ...f };
+      if (s.corrections[f.field] != null) { out.raw = s.corrections[f.field]; out.method = 'reviewer'; out.review = 'corrected'; out.checks = { source_match: 'pass', role_check: 'pass', normalization: 'pass' }; out.status = 'selected'; }
+      else if (s.attested[f.field]) { out.review = 'attested'; }
+      return out;
+    });
+  }
+  renderVals() {
+    const s = this.state, props = this.props;
+    const railItems = [
+      { id: 'invoices', icon: 'fa-solid fa-file-lines', label: 'Invoices' },
+      { id: 'pos', icon: 'fa-solid fa-rectangle-list', label: 'POs' },
+      { id: 'vendors', icon: 'fa-solid fa-building', label: 'Vendors' },
+      { id: 'audit', icon: 'fa-solid fa-square-check', label: 'Audit log' },
+    ].map(it => {
+      const active = it.id === 'invoices';
+      return {
+        icon: it.icon, label: it.label,
+        style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '10px 4px', cursor: 'pointer', color: active ? '#00C19F' : '#8D8F92', fontSize: '10px', fontWeight: 500, lineHeight: 1.15, textAlign: 'center', transition: 'color .12s' },
+        tileStyle: { width: '40px', height: '34px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: active ? 'rgba(0,193,159,0.14)' : 'transparent', fontSize: '18px' },
+      };
+    });
+    const runRows = s.runs.map(r => {
+      const m = this.dispMeta(r.disposition, r.run_status);
+      return {
+        filename: r.filename, time: r.time, isReview: r.kind === 'review',
+        fileIcon: r.kind === 'review' ? 'fa-solid fa-rotate-left' : 'fa-solid fa-file-pdf',
+        fileIconColor: r.kind === 'review' ? '#8D8F92' : '#B7BCC9',
+        statusLabel: r.run_status, statusColor: r.run_status === 'failed' ? '#DA7F8F' : '#8D8F92',
+        dispLabel: m.label, pillIcon: m.icon, pillStyle: this.pillStyle(m),
+        open: () => this.setState({ view: 'run', activeRunId: r.run_id, drafts: {} }),
+      };
+    });
+    const byCur = {};
+    s.pos.forEach(p => { (byCur[p.currency] = byCur[p.currency] || []).push(p); });
+    const poGroups = Object.keys(byCur).map(cur => ({
+      currency: cur,
+      pos: byCur[cur].map(p => {
+        const pct = Math.min(100, Math.round(p.consumed_minor / p.amount_minor * 100));
+        return {
+          po_id: p.po_id, supplier: p.supplier, status: p.status, pct,
+          consumedFmt: this.fmt(p.consumed_minor, cur), baseFmt: this.fmt(p.amount_minor, cur),
+          statusStyle: { fontSize: '10.5px', color: p.status === 'open' ? '#3BB443' : '#8D8F92', border: '1px solid ' + (p.status === 'open' ? 'rgba(59,180,67,0.35)' : '#3B444D'), borderRadius: '9999px', padding: '1px 8px' },
+          barStyle: { height: '100%', width: pct + '%', background: p.status === 'closed' ? '#696D77' : (pct >= 100 ? '#E6A516' : '#39ACFF'), borderRadius: '9999px', transition: 'width 600ms ease-out' },
+        };
+      }),
+    }));
+    // ---- run detail ----
+    let d = null, showReview = false, reviewRows = [], attestRows = [], poCandidates = [], hasAttest = false;
+    const run = s.runs.find(r => r.run_id === s.activeRunId);
+    const raw = run && s.details[run.run_id];
+    if (run && raw) {
+      const m = this.dispMeta(run.disposition, run.run_status);
+      const isHeldIntake = run.run_id === 'run_9f2e' && !s.resolved.run_9f2e;
+      const fields = run.run_id === 'run_9f2e' ? this.mergedFields() : raw.fields;
+      const groupsMap = {};
+      raw.codes.forEach(c => { (groupsMap[c.group] = groupsMap[c.group] || []).push(c.code); });
+      d = {
+        runId: run.run_id, filename: run.filename, time: run.time,
+        kindLabel: run.kind === 'review' ? 'review run' : 'intake run',
+        decisionMode: raw.decision_mode,
+        dispLabel: m.label, pillIcon: m.icon, pillStyle: this.pillStyle(m),
+        bannerStyle: { background: 'var(--bg-raised)', border: '1px solid var(--border)', borderLeft: '3px solid ' + m.fg, borderRadius: '8px', padding: '16px 20px', marginBottom: '20px', boxShadow: 'var(--shadow-card)' },
+        explanation: raw.explanation,
+        hasCodes: raw.codes.length > 0,
+        codeGroups: Object.keys(groupsMap).map(g => ({ group: g, codes: groupsMap[g] })),
+        hasCurrency: !!raw.currency,
+        curCode: raw.currency ? raw.currency.code : 'Not stated',
+        curHow: raw.currency ? raw.currency.how : '',
+        curArith: raw.currency ? raw.currency.arith : '',
+        curRefs: raw.currency ? raw.currency.refs : '—',
+        hasFields: fields.length > 0,
+        fields: fields.map(f => ({
+          name: f.field, status: f.status, raw: f.raw, method: f.method,
+          statusColor: f.status === 'selected' ? '#B7BCC9' : (f.status === 'missing' ? '#696D77' : '#E6A516'),
+          checks: ['source_match', 'role_check', 'normalization'].map(k => this.checkChip(k, f.checks[k])),
+          reviewMark: f.review === 'corrected' ? 'corrected' : (f.review === 'attested' ? 'attested' : ''),
+          reviewIcon: f.review === 'corrected' ? 'fa-solid fa-pen' : (f.review === 'attested' ? 'fa-solid fa-check' : null),
+          reviewColor: f.review === 'corrected' ? '#39ACFF' : (f.review === 'attested' ? '#3BB443' : '#696D77'),
+        })),
+        hasEvents: raw.events.length > 0, eventCount: raw.events.length,
+        events: raw.events.map(ev => ({
+          seq: ev.seq, stage: ev.stage,
+          stageStyle: { fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 500, color: this.stageColor(ev.stage), letterSpacing: '0.03em' },
+          textStyle: ev.mono ? { fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#B7BCC9', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' } : { fontSize: '12.5px', color: '#B7BCC9', overflowWrap: 'anywhere' },
+          text: ev.text, model: ev.model || false, latency: ev.latency || '', tokens: ev.tokens || '',
+        })),
+      };
+      showReview = isHeldIntake;
+      if (showReview) {
+        const editable = fields.filter(f => f.status !== 'missing');
+        reviewRows = editable.map(f => {
+          const cur = s.corrections[f.field] != null ? s.corrections[f.field] : f.raw;
+          const draft = s.drafts[f.field];
+          const changed = draft != null && draft !== cur && draft.trim() !== '';
+          return {
+            name: f.field, value: cur, key: f.field + ':' + s.revisionSeq,
+            onEdit: (e) => this.setState({ drafts: { ...this.state.drafts, [f.field]: e.target.value } }),
+            saveDisabled: !changed,
+            saveStyle: { fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 500, borderRadius: '8px', border: 'none', padding: '7px 0', cursor: changed ? 'pointer' : 'default', background: changed ? '#1463B8' : '#2F3842', color: changed ? '#F4F4F4' : '#696D77' },
+            onSave: () => {
+              if (!changed) return;
+              this.setState({ corrections: { ...this.state.corrections, [f.field]: draft }, drafts: { ...this.state.drafts, [f.field]: null }, revisionSeq: this.state.revisionSeq + 1 });
+              this.showToast('info', 'Field corrected — revision ' + (this.state.revisionSeq + 1), f.field + ' → ' + draft + ' · immutable revision created');
+            },
+          };
+        });
+        attestRows = fields.filter(f => f.method === 'llm_vision').map(f => ({
+          name: f.field, value: s.corrections[f.field] != null ? s.corrections[f.field] : f.raw,
+          checked: !!s.attested[f.field] || f.review === 'attested',
+          stateLabel: (s.attested[f.field] || f.review === 'attested') ? 'attested' : 'not attested',
+          onToggle: () => {
+            const on = !this.state.attested[f.field];
+            this.setState({ attested: { ...this.state.attested, [f.field]: on }, revisionSeq: this.state.revisionSeq + 1 });
+            if (on) this.showToast('info', 'Attested — revision ' + (this.state.revisionSeq + 1), f.field + ' scan evidence marked trusted by clerk@finance');
+          },
+        }));
+        hasAttest = attestRows.length > 0;
+        poCandidates = s.pos.filter(p => p.supplier === 'Acme Industrial Supply' && p.currency === 'USD' && p.status === 'open').map(p => {
+          const sel = s.selectedPo === p.po_id;
+          return {
+            po_id: p.po_id, supplier: p.supplier,
+            baseFmt: this.fmt(p.amount_minor, 'USD'), remainFmt: this.fmt(p.amount_minor - p.consumed_minor, 'USD'),
+            radioIcon: sel ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle', radioColor: sel ? '#39ACFF' : '#696D77',
+            cardStyle: { background: 'var(--bg-inset)', border: sel ? '1.5px solid #39ACFF' : '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', cursor: 'pointer' },
+            onPick: () => this.setState({ selectedPo: sel ? null : p.po_id }),
+          };
+        });
+      }
+    }
+    // ---- live ----
+    const live = s.live || { filename: '', stages: [], done: false };
+    const liveStages = live.stages.map(st => {
+      const running = st.status === 'running', done = st.status === 'done';
+      return {
+        label: st.id, note: st.note || (running ? 'in progress…' : (done ? '' : 'waiting')),
+        labelColor: done ? '#F4F4F4' : (running ? '#39ACFF' : '#696D77'),
+        icon: done ? 'fa-regular fa-circle-check' : (running ? 'fa-solid fa-circle-notch' : 'fa-regular fa-circle'),
+        iconStyle: { fontSize: '13px', color: done ? '#3BB443' : (running ? '#39ACFF' : '#4A505C'), animation: running ? 'bcy-spin 900ms linear infinite' : 'none' },
+        cardStyle: { background: 'var(--bg-raised)', border: running ? '1.5px solid #39ACFF' : '1px solid var(--border)', borderRadius: '8px', padding: '12px 14px', boxShadow: 'var(--shadow-card)', transition: 'border-color 150ms ease-out' },
+      };
+    });
+    const liveMeta = this.dispMeta('AUTO_APPROVE');
+    return {
+      railItems,
+      navLabel: s.view === 'dashboard' ? 'Invoices' : (s.view === 'live' ? 'Processing' : (s.activeRunId || 'Run')),
+      isDashboard: s.view === 'dashboard', isRun: s.view === 'run' && !!d, isLive: s.view === 'live',
+      runRows, poGroups, d: d || {}, showReview, reviewRows, attestRows, hasAttest, poCandidates,
+      revisionSeq: s.revisionSeq,
+      traceOpen: s.traceOpen, traceChevron: s.traceOpen ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down',
+      toggleTrace: () => this.setState({ traceOpen: !this.state.traceOpen }),
+      goHome: () => this.setState({ view: 'dashboard', activeRunId: null }),
+      startDemoRun: () => this.startDemoRun(),
+      resetDemo: () => { clearTimeout(this._lt); this.setState(this.initialState()); this.showToast('info', 'Workspace reset', 'POs, runs and revisions restored to seed state'); },
+      approveRun: () => this.reevaluate(),
+      rejectRun: () => {
+        const reason = (s.rejectReason || '').trim();
+        if (!reason) { this.showToast('warning', 'Rejection needs a reason', 'Enter a short reason — it goes in the audit log'); return; }
+        const rid = 'run_' + Math.random().toString(16).slice(2, 6);
+        const detail = {
+          decision_mode: 'reviewer',
+          explanation: 'Rejected by reviewer. Reason: ' + reason + '. Nothing was posted to the approved ledger. The intake run and all revisions remain in the audit log.',
+          codes: [{ code: 'REVIEWER_REJECTED', group: 'Business conflicts' }],
+          currency: s.details.run_9f2e.currency, fields: this.mergedFields(),
+          events: [{ seq: 1, stage: 'DECIDE', text: 'reviewer clerk@finance rejected at revision ' + s.revisionSeq + ' · reason: ' + reason }],
+        };
+        this.setState({ runs: [{ run_id: rid, kind: 'review', filename: 'acme-inv-2214.pdf', run_status: 'completed', disposition: 'REVIEWER_REJECTED', time: this.now() }, ...s.runs], details: { ...s.details, [rid]: detail }, resolved: { ...s.resolved, run_9f2e: true }, activeRunId: rid, view: 'run' });
+        this.showToast('danger', 'Rejected by reviewer', 'Nothing posted · decision recorded at revision ' + s.revisionSeq);
+      },
+      onRejectReason: (e) => this.setState({ rejectReason: e.target.value }),
+      liveFilename: live.filename, liveStages, liveDone: live.done,
+      liveDispLabel: liveMeta.label, livePillStyle: this.pillStyle(liveMeta),
+      liveExplanation: 'Auto-approved. All gates passed. Posted EUR 2,300.00 to PO-4522, bringing approved billing to EUR 6,450.00 of EUR 12,500.00.',
+      openLiveRun: () => this.setState({ view: 'run', activeRunId: 'run_c4d1' }),
+      toast: !!s.toast, toastTone: s.toastTone || 'info', toastTitle: s.toastTitle || '', toastSub: s.toastSub || '',
+      closeToast: () => this.setState({ toast: false }),
+    };
+  }
+  componentWillUnmount() { clearTimeout(this._lt); clearTimeout(this._tt); }
+}
+</script>
+</body>
+</html>

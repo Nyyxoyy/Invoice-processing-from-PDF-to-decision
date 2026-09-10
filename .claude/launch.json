@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ap-api",
+      "runtimeExecutable": "/Users/nikunj/zamp-case-study/venv/bin/python",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8321", "--app-dir", "/Users/nikunj/zamp-case-study/backend"],
+      "port": 8321
+    }
+  ]
+}

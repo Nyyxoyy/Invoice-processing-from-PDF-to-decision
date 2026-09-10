@@ -1,0 +1,265 @@
+/* ==========================================================================
+   Bicycle Design System — Colors & Type
+   Source: Figma "Design System.fig" (Foundation pages)
+   ========================================================================== */
+
+/* --- Webfonts ---------------------------------------------------------- */
+/* Outfit — Bicycle's brand typeface. Loaded from local TTFs in /fonts. */
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 100; font-display: swap;
+  src: url('fonts/Outfit-Thin.ttf')        format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 200; font-display: swap;
+  src: url('fonts/Outfit-ExtraLight.ttf')  format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 300; font-display: swap;
+  src: url('fonts/Outfit-Light.ttf')       format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('fonts/Outfit-Regular.ttf')     format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('fonts/Outfit-Medium.ttf')      format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('fonts/Outfit-SemiBold.ttf')    format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('fonts/Outfit-Bold.ttf')        format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 800; font-display: swap;
+  src: url('fonts/Outfit-ExtraBold.ttf')   format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 900; font-display: swap;
+  src: url('fonts/Outfit-Black.ttf')       format('truetype'); }
+
+/* Mono fallback — Figma used Menlo (system). We pair with JetBrains Mono from CDN. */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ==========  Global Colors  ========================================== */
+
+  /* Brand — teal/emerald (the "bb" mark) */
+  --brand-green:        #00C19F;
+  --brand-green-a2:     #00C19F;
+  --brand-green-a1:     #00C19F;
+
+  /* Neutral dark — default canvas & surfaces */
+  --neutral-dark-canvas:#15202B;
+  --neutral-dark-700:   #212B36;
+  --neutral-dark-600:   #2F3842;
+  --neutral-dark-500:   #3B444D;
+  --neutral-dark-400:   #4A505C;
+  --neutral-dark-300:   #696D77;
+  --neutral-dark-200:   #8D8F92;
+  --neutral-dark-100:   #B7BCC9;
+  --neutral-dark-50:    #F4F4F4;
+
+  /* Blue — primary UI accent (buttons, links, focus) */
+  --blue-500:           #1463B8;
+  --blue-400:           #0083C1;
+  --blue-300:           #39ACFF;
+  --blue-a300:          #39ACFF;
+  --blue-200:           #6CBAF2;
+  --blue-100:           #82DFDF;
+  --blue-50:            #93B5C6;
+
+  /* Green — success / positive data */
+  --green-400:          #3BB443;
+  --green-a400:         #E0DDAA;
+  --green-300:          #8B9A46;
+  --green-200:          #C0DE8B;
+  --green-100:          #C8C6A7;
+  --green-50:           #E0DDAA;
+
+  /* Emerald */
+  --emerald-200:        #008F76;
+  --emerald-100:        #78D198;
+  --emerald-50:         #76D0A3;
+
+  /* Orange-brown */
+  --orange-brown-100:   #BF8B67;
+  --orange-brown-50:    #EC915A;
+
+  /* Red — danger / error */
+  --red-400:            #DB1C02;
+  --red-a400:           #FF523B;
+  --red-300:            #FF4F36;
+  --red-200:            #DA7F8F;
+  --red-100:            #F68989;
+  --red-50:             #FFE3E3;
+
+  /* Pink */
+  --pink-100:           #E24282;
+  --pink-50:            #F695B3;
+
+  /* Violet */
+  --violet-100:         #533EB4;
+  --violet-50:          #7C83FD;
+
+  /* Magenta */
+  --magenta-100:        #953B91;
+  --magenta-50:         #CF5EDA;
+
+  /* Purple */
+  --purple-100:         #9C51E0;
+  --purple-50:          #A186F0;
+
+  /* Yellow — warning / highlight */
+  --yellow-200:         #E6A516;
+  --yellow-a200:        #E6A516;
+  --yellow-100:         #F0BB62;
+  --yellow-50:          #E9CB7B;
+
+  /* True neutrals */
+  --white:              #FFFFFF;
+  --black:              #000000;
+  --ink:                #202223;             /* top text color in Figma */
+  --border-soft:        #E1E3E5;
+  --border-hair:        rgba(108,132,157,0.18);
+  --surface-tint:       rgba(108,132,157,0.12);
+
+  /* ==========  Semantic (dark theme — the system default)  ============ */
+  --bg:                 var(--neutral-dark-canvas);  /* #15202B */
+  --bg-raised:          var(--neutral-dark-700);     /* #212B36 */
+  --bg-overlay:         var(--neutral-dark-600);     /* #2F3842 dropdowns/menus */
+  --bg-inset:           #0F1822;                      /* inputs / inset panels  */
+
+  --fg:                 var(--neutral-dark-50);      /* #F4F4F4 primary text */
+  --fg-muted:           var(--neutral-dark-100);     /* #B7BCC9 secondary   */
+  --fg-subtle:          var(--neutral-dark-200);     /* #8D8F92 caption     */
+  --fg-disabled:        var(--neutral-dark-300);
+
+  --border:             var(--neutral-dark-500);     /* #3B444D */
+  --border-strong:      var(--neutral-dark-400);
+  --border-focus:       var(--blue-300);             /* #39ACFF */
+
+  --accent:             var(--brand-green);          /* #00C19F */
+  --accent-fg:          #052F27;
+
+  --primary:            var(--blue-500);             /* #1463B8 */
+  --primary-hover:      var(--blue-400);
+  --primary-fg:         var(--neutral-dark-50);
+
+  --success:            var(--green-400);
+  --warning:            var(--yellow-200);
+  --danger:             var(--red-400);
+  --danger-hover:       var(--red-a400);
+  --info:               var(--blue-300);
+
+  /* ==========  Object — radius / border / spacing  ==================== */
+  --radius-s:           4px;
+  --radius-default:     8px;
+  --radius-large:       12px;
+  --radius-xl:          16px;
+  --radius-xxl:         24px;
+  --radius-full:        9999px;
+
+  --border-default:     1px;
+  --border-l:           1.5px;
+  --border-xl:          2px;
+
+  --space-xs:           2px;
+  --space-small:        4px;
+  --space-default:      8px;
+  --space-large:        12px;
+  --space-xl:           16px;
+  --space-xxl:          24px;
+  --space-3xl:          32px;
+  --space-4xl:          48px;
+
+  /* Shadow — used on dropdowns, modals, toasts */
+  --shadow-menu:        0 2px 12px 0 rgba(0,0,0,0.30);
+  --shadow-modal:       0 24px 48px -12px rgba(0,0,0,0.45);
+  --shadow-card:        0 1px 2px 0 rgba(0,0,0,0.25);
+
+  /* ==========  Typography — Outfit everywhere  ======================== */
+  --font-sans:          'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:          'JetBrains Mono', 'Menlo', ui-monospace, monospace;
+
+  /* Size scale */
+  --fs-caption-sm:      10px;   /* line 14 */
+  --fs-caption:         12px;   /* line 16 */
+  --fs-body-sm:         12px;
+  --fs-body:            14px;   /* line 20 — workhorse */
+  --fs-body-lg:         16px;   /* line 22 */
+  --fs-title:           16px;   /* line 22 / 500 */
+  --fs-heading:         18px;   /* line 28 / 500 */
+  --fs-h3:              20px;
+  --fs-display:         32px;
+
+  /* Weights */
+  --fw-extralight:      200;  /* @kind font */
+  --fw-regular:         400;  /* @kind font */
+  --fw-medium:          500;  /* @kind font */
+  --fw-semibold:        600;  /* @kind font */
+  --fw-bold:            700;  /* @kind font */
+
+  /* Line heights */
+  --lh-14:              14px;
+  --lh-16:              16px;
+  --lh-20:              20px;
+  --lh-22:              22px;
+  --lh-28:              28px;
+}
+
+/* --- Semantic roles ---------------------------------------------------- */
+.bcy-heading, h1, h2, .bcy-h3 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-heading);
+  line-height: var(--lh-28);
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+.bcy-title, h3, h4 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-title);
+  line-height: var(--lh-22);
+  color: var(--fg);
+}
+.bcy-metric {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-title);
+  line-height: var(--lh-22);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.bcy-body-lg, p.lg {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-22);
+  color: var(--fg);
+}
+.bcy-body, p, body {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-body);
+  line-height: var(--lh-20);
+  color: var(--fg);
+}
+.bcy-body-sm, small {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-16);
+  color: var(--fg-muted);
+}
+.bcy-caption {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-16);
+  color: var(--fg-muted);
+}
+.bcy-caption-sm {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-caption-sm);
+  line-height: var(--lh-14);
+  color: var(--fg-subtle);
+}
+.bcy-code, code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-body);
+  line-height: var(--lh-20);
+  color: var(--fg);
+}
+
+/* Tabular numerals for any data/table UI */
+.bcy-tnum { font-variant-numeric: tabular-nums; }

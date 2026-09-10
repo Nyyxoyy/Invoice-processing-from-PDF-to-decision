@@ -1,0 +1,11 @@
+venv/
+data/
+backups/
+design-import/
+fixtures/hf-invoices/
+tests/
+tools/
+**/__pycache__/
+*.db
+.env
+*.md
