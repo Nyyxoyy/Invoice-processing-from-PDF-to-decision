@@ -1746,11 +1746,15 @@ async function master(kind, generation) {
           )}</div><p class="footer-note">${isAdmin() ? "Blocking a supplier rejects its future invoices without deleting history. Deleting is only possible for suppliers with no invoices or purchase orders." : "Only procurement (administrator role) can onboard, edit or block suppliers."}</p>`);
 }
 async function queue(generation) {
-  const [items, tickets, runs] = await Promise.all([
+  const [items, tickets, runs, vendors, pos] = await Promise.all([
     isAdmin() ? api("/api/queue/procurement") : Promise.resolve([]),
     api("/api/tickets?status=all"),
     api("/api/runs"),
+    api("/api/vendors"),
+    api("/api/pos"),
   ]);
+  state.vendors = vendors;
+  state.pos = pos;
   if (generation !== state.generation) return;
   state.runs = runs;
   state.allTickets = tickets;
@@ -1763,7 +1767,9 @@ async function queue(generation) {
       isAdmin()
         ? "Help reviewers move forward. Update the supplier or order, then reply."
         : "Follow what you’ve asked procurement to update, and pick up their replies.",
-      '<button data-action="reload">Refresh requests</button>',
+      isAdmin()
+        ? '<button data-action="reload">Refresh requests</button>'
+        : '<button class="primary" data-action="new-request">New request</button>',
     ) +
     `<section class="card"><div class="inbox-tools"><div class="filters" id="request-filters" aria-label="Filter requests"></div><input class="search" id="request-search" aria-label="Search requests" placeholder="Search supplier, order or note" value="${esc(state.requestSearch)}"></div><div id="request-list"></div></section>${isAdmin() ? `<details class="card detected-needs"><summary>Invoices that may need help (${state.detectedNeeds.length})</summary><p>No open request covers these items. Open an invoice to see what’s needed.</p>${state.detectedNeeds.map((it) => `<div class="request-row"><div><b>${esc(it.supplier_name || "Supplier not read")}</b><small>${esc(it.filename)}</small><p>${it.asks.map((a) => esc(a.text)).join(" · ")}</p></div><a class="button-link" href="#invoice/${encodeURIComponent(latestDescendant(it.run_id))}">View invoice →</a></div>`).join("") || "<p>No additional invoices need procurement.</p>"}</details>` : ""}`;
   renderRequests();
@@ -1801,10 +1807,18 @@ function renderRequests() {
     list
       .map(
         (t) =>
-          `<article class="request-row"><div class="request-main"><div class="request-title"><h2>${esc(t.supplier_name || "Supplier not read")}</h2><span class="badge ${esc(t.status)}">${t.status === "open" ? (isAdmin() ? "To do" : "With procurement") : t.status === "resolved" ? "Completed" : "Declined"}</span></div><p>${esc(t.kind_label || TICKET_KINDS[t.kind])}${t.po_reference ? ` · ${esc(t.po_reference)}` : ""}</p><small>${esc(t.filename)} · ${esc(date(t.created_at))}</small>${t.note ? `<p class="request-note">${esc(t.note)}</p>` : ""}${t.status === "open" && t.fulfilled ? `<p class="saved-mark">✓ ${esc(t.fact)} Closing automatically.</p>` : ""}${t.status !== "open" ? `<div class="request-answer"><b>Procurement’s reply</b><p>${esc(t.resolution_note || "No note was included.")}</p></div>` : ""}</div><a class="button-link ${t.status === "open" && isAdmin() ? "primary" : ""}" href="#invoice/${encodeURIComponent(latestDescendant(t.run_id))}">${isAdmin() ? (t.status === "open" ? "Resolve request" : "View invoice") : t.status === "resolved" ? "Open invoice" : "View request"} →</a></article>`,
+          `<article class="request-row"><div class="request-main"><div class="request-title"><h2>${esc(t.supplier_name || "Supplier not read")}</h2><span class="badge ${esc(t.status)}">${t.status === "open" ? (isAdmin() ? "To do" : "With procurement") : t.status === "resolved" ? "Completed" : "Declined"}</span></div><p>${esc(t.kind_label || TICKET_KINDS[t.kind])}${t.po_reference ? ` · ${esc(t.po_reference)}` : ""}</p><small>${esc(t.standalone ? "Raised from My requests" : t.filename)} · ${esc(date(t.created_at))}</small>${t.note ? `<p class="request-note">${esc(t.note)}</p>` : ""}${t.status === "open" && t.fulfilled ? `<p class="saved-mark">✓ ${esc(t.fact)} Closing automatically.</p>` : ""}${t.status !== "open" ? `<div class="request-answer"><b>Procurement’s reply</b><p>${esc(t.resolution_note || "No note was included.")}</p></div>` : ""}</div>${
+            t.standalone
+              ? isAdmin() && t.status === "open"
+                ? `<button class="button-link primary" data-action="resolve-standalone" data-id="${esc(t.ticket_id)}">Resolve request</button>`
+                : t.kind === "raise_po" && t.supplier_id
+                  ? `<a class="button-link" href="#vendors/${encodeURIComponent(t.supplier_id)}">View supplier →</a>`
+                  : `<a class="button-link" href="#vendors">Suppliers →</a>`
+              : `<a class="button-link ${t.status === "open" && isAdmin() ? "primary" : ""}" href="#invoice/${encodeURIComponent(latestDescendant(t.run_id))}">${isAdmin() ? (t.status === "open" ? "Resolve request" : "View invoice") : t.status === "resolved" ? "Open invoice" : "View request"} →</a>`
+          }</article>`,
       )
       .join("") ||
-    `<div class="empty"><h2>${q ? "No matching requests" : state.requestFilter === "open" ? "No requests waiting" : "No requests here yet"}</h2><p>${q ? "Try a different supplier, order number or note." : isAdmin() ? "New requests from reviewers will appear here." : "Ask procurement from an invoice when you need a supplier or purchase order updated."}</p><a href="#invoices">${isAdmin() ? "View invoice history" : "Go to invoice reviews"} →</a></div>`;
+    `<div class="empty"><h2>${q ? "No matching requests" : state.requestFilter === "open" ? "No requests waiting" : "No requests here yet"}</h2><p>${q ? "Try a different supplier, order number or note." : isAdmin() ? "New requests from reviewers will appear here." : "Ask from an invoice, or use New request above for a supplier or purchase order you know you will need."}</p><a href="#invoices">${isAdmin() ? "View invoice history" : "Go to invoice reviews"} →</a></div>`;
 }
 async function refreshQueueCount() {
   if (!isAdmin()) return;
@@ -1932,6 +1946,35 @@ async function submitForm(form) {
         });
       await refreshDetail([field]);
       notice(unchangedScan ? `${FIELD[field] || field} confirmed.` : `${FIELD[field] || field} saved.`);
+    } else if (type === "standalone-request") {
+      const res = await post("/api/requests", {
+        kind: body.kind,
+        subject: (body.subject || "").trim() || null,
+        supplier_id: body.supplier_id || null,
+        note: (body.note || "").trim(),
+      });
+      closeModal();
+      notice(res.existing ? "That request is already open with procurement." : "Request sent to procurement.");
+      await route();
+    } else if (type === "onboard" && form.dataset.standalone) {
+      const res = await post("/api/vendors", { name: body.name.trim(), country: (body.country || "").trim() || null });
+      closeModal();
+      notice(res.settled?.length ? "Supplier added. The request is complete." : "Supplier added.");
+      await route();
+    } else if (type === "create-po" && form.dataset.standalone) {
+      const res = await post("/api/pos", { ...body, supplier_id: form.dataset.supplier });
+      closeModal();
+      notice(res.settled?.length ? "Purchase order added. The request is complete." : "Purchase order added.");
+      await route();
+    } else if (type === "add-alias" && form.dataset.standalone) {
+      const res = await api(`/api/vendors/${encodeURIComponent(body.supplier_id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ add_aliases: [form.dataset.subject] }),
+      });
+      closeModal();
+      notice(res.settled?.length ? `“${form.dataset.subject}” registered under ${res.name}. The request is complete.` : `“${form.dataset.subject}” registered under ${res.name}.`);
+      await route();
     } else if (type === "map-supplier") {
       const vendor = state.vendors.find((v) => v.supplier_id === body.supplier_id);
       if (!vendor) throw new ApiError("Choose a supplier from the list.");
@@ -2044,6 +2087,7 @@ async function submitForm(form) {
         "Recorded as a separate invoice. Check again to run the remaining checks.",
       );
     } else if (type === "resolve-ticket") {
+      closeModal();
       const outcome = form.dataset.outcome || "resolved";
       await post(
         `/api/tickets/${encodeURIComponent(form.dataset.id)}/resolve`,
@@ -2311,6 +2355,31 @@ async function handleAction(action, button) {
     );
     return;
   }
+  if (action === "new-request") {
+    const approved = state.vendors.filter((v) => v.status === "approved").sort((a, b) => a.name.localeCompare(b.name));
+    openModal({
+      title: "New request to procurement",
+      subtitle: "Not tied to an invoice. It closes itself once the supplier or order exists.",
+      body: `<form data-form="standalone-request" class="form-grid modal-form"><label>What do you need?<select name="kind" data-request-kind><option value="onboard_supplier">Onboard a new supplier</option><option value="raise_po">Raise a purchase order for a supplier</option></select></label><label data-when="onboard_supplier">Supplier name<input name="subject" placeholder="Exactly as it appears on their invoices" required></label><label data-when="raise_po" hidden>Supplier<select name="supplier_id"><option value="">Choose a supplier…</option>${approved.map((v) => `<option value="${esc(v.supplier_id)}">${esc(v.name)}</option>`).join("")}</select></label><label>Note for procurement<textarea name="note" placeholder="Why it is needed, amount and currency for an order, contract or contact details"></textarea></label><button class="primary small">Send request</button></form>`,
+    });
+    return;
+  }
+  if (action === "resolve-standalone") {
+    const t = (state.allTickets || []).find((x) => x.ticket_id === button.dataset.id);
+    if (!t) return;
+    const approved = state.vendors.filter((v) => v.status === "approved").sort((a, b) => a.name.localeCompare(b.name));
+    const vendor = state.vendors.find((v) => v.supplier_id === t.supplier_id);
+    const work =
+      t.kind === "onboard_supplier"
+        ? `<form data-form="onboard" data-standalone="1" class="form-grid modal-form"><label>Supplier legal name<input name="name" value="${esc(t.subject || "")}" required></label><label>Country (optional)<input name="country"></label><button class="primary small">Add approved supplier</button></form><details class="compact-details"><summary>Existing supplier under another name?</summary><form data-form="add-alias" data-standalone="1" data-subject="${esc(t.subject || "")}" class="form-grid"><label>Approved supplier<select name="supplier_id" required><option value="">Choose a supplier…</option>${approved.map((v) => `<option value="${esc(v.supplier_id)}">${esc(v.name)}</option>`).join("")}</select></label><button class="small">Register “${esc(t.subject || "")}” as a name of this supplier</button></form></details>`
+        : `<form data-form="create-po" data-standalone="1" data-supplier="${esc(t.supplier_id || "")}" class="form-grid modal-form"><p class="muted">Order for <b>${esc(vendor?.name || t.subject || "")}</b>.</p><label>Purchase order number<input name="po_id" placeholder="PO-3010" required></label><label>Currency<input name="currency" placeholder="USD" required></label><label>Authorized amount<input name="amount" inputmode="decimal" placeholder="10000.00" required></label><button class="primary small">Add purchase order</button></form>`;
+    openModal({
+      title: t.kind_label || TICKET_KINDS[t.kind],
+      subtitle: `${t.subject || ""}${t.note ? ` · “${t.note}”` : ""} · asked by ${t.requested_by}`,
+      body: `${work}<div class="modal-actions">${requestFooterHTML([t])}</div>`,
+    });
+    return;
+  }
   if (action === "close-modal") {
     closeModal();
     return;
@@ -2417,6 +2486,14 @@ document.addEventListener("submit", (e) => {
 });
 document.addEventListener("change", (e) => {
   const sel = e.target;
+  if (sel instanceof HTMLSelectElement && sel.hasAttribute("data-request-kind")) {
+    sel.closest("form").querySelectorAll("[data-when]").forEach((el) => {
+      const on = el.dataset.when === sel.value;
+      el.hidden = !on;
+      el.querySelectorAll("input, select").forEach((i) => (i.required = on));
+    });
+    return;
+  }
   if (!(sel instanceof HTMLSelectElement) || !sel.hasAttribute("data-map-supplier")) return;
   const form = sel.closest("form");
   const po = form?.querySelector("select[data-map-po]");

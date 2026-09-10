@@ -21,7 +21,7 @@ from .normalize import display_values, unusable_reason
 from .review import (TICKET_KINDS, ReviewError, attest_fields, budget_forecast, confirm_not_duplicate, correct_field,
                      create_po, delete_po, invoice_gross_minor,
                      delete_vendor, diagnose_run, field_diagnosis, list_tickets, load_latest,
-                     onboard_vendor, open_ticket, po_candidates, procurement_asks, procurement_queue, reevaluate, reject,
+                     onboard_vendor, open_standalone_request, open_ticket, po_candidates, procurement_asks, procurement_queue, reevaluate, reject,
                      resolve_ticket, settle_requests, update_po, update_vendor)
 from .pipeline import OperationalFailure, process_document, startup_recovery
 from .ledger import CommitResult
@@ -531,6 +531,19 @@ class TicketBody(BaseModel):
     run_id: str
     kind: str
     note: str = ""
+
+
+class StandaloneRequestBody(BaseModel):
+    kind: str                      # onboard_supplier | raise_po
+    subject: str | None = None     # supplier name to onboard
+    supplier_id: str | None = None # supplier the order is for
+    note: str = ""
+
+
+@app.post("/api/requests")
+def create_standalone_request(body: StandaloneRequestBody, user: dict = Depends(require_reviewer)):
+    return _review_guard(open_standalone_request)(app.state.conn, body.kind, body.note, user["actor"],
+                                                  subject=body.subject, supplier_id=body.supplier_id)
 
 
 class TicketResolveBody(BaseModel):

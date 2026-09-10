@@ -1,7 +1,7 @@
 # AP Invoice Decisioning — Implementation Record
 
 Zamp ASA case study, PS-1 (invoice PDF → explained decision). Status as of 2026-09-10.
-Runs locally at `http://localhost:8321`. 120 automated tests green. Two roles (invoice reviewer, procurement admin) with server-side enforcement. See `UX_FINDINGS.md` for the running UX audit (Steps 1–9) and verification record. Plan baseline: `PLAN.md` (v2.2, locked).
+Runs locally at `http://localhost:8321`. 121 automated tests green. Two roles (invoice reviewer, procurement admin) with server-side enforcement. See `UX_FINDINGS.md` for the running UX audit (Steps 1–9) and verification record. Plan baseline: `PLAN.md` (v2.2, locked).
 
 One line: **the LLM reads the document; code verifies every value, decides all money, and explains itself.**
 
@@ -232,7 +232,7 @@ Files: `backend/app/static/index.html`, `app.css`, `app.js`. Backups: `backups/i
 
 Browser verification used `tools/ux_qa_server.py` on port 8322, an isolated temporary database and deterministic extraction fixtures (no model calls). Verified date correction→approval, supplier→new PO→approval, interrupted reading→retry result, scan confirmation→approval, invalid field recovery, rejection, search, and desktop/mobile layouts. Real existing invoice data was also inspected read-only on port 8321.
 
-## 12. Tests (120)
+## 12. Tests (121)
 
 | File | Covers |
 |---|---|
@@ -418,3 +418,7 @@ Artifacts: `Dockerfile` (python:3.13-slim, uvicorn, `DATA_DIR=/data` volume, hea
 Required environment: `GEMINI_API_KEY`, `ADMIN_ACCESS_CODE`, `REVIEWER_ACCESS_CODE` (the app refuses to fall back to demo codes only implicitly — set both), `DATA_DIR=/data`. `PORT` is supplied by the platform.
 
 Steps: `git init` + push to a private GitHub repo → Render "New Blueprint" from the repo → set the three secrets → deploy → sign in with the codes. Railway or Fly.io work the same way with a volume at `/data`. First boot seeds the demo suppliers and orders; nothing from the local `data/` directory is shipped.
+
+## 32. Standalone requests (2026-09-11)
+
+Reviewers can raise a request without an invoice: **New request** on My requests (replaces Refresh for that role) opens the modal with two kinds — onboard a named supplier, or raise a purchase order for an existing supplier — plus a note. `POST /api/requests` (`open_standalone_request`); `tickets.run_id` is now nullable (older databases are rebuilt in place by `_relax_ticket_run`) and `tickets.subject` holds the supplier name. Duplicates return the existing request; a request the record already satisfies is refused. Fulfilment is derived like invoice requests (`_standalone_fulfilled`: approved supplier by name or alias; a new order for the pinned supplier), so it closes itself through `settle_requests` with "Done by procurement". Admin resolves from the Requests page in the modal (onboard form / register alias / create order / decline); rows show "Raised from My requests" and link to the supplier. Test `test_standalone_requests_close_themselves_like_invoice_ones`. 121 tests.

@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS field_revisions (
 -- are recorded on the invoice run's audit trail as well.
 CREATE TABLE IF NOT EXISTS tickets (
     ticket_id       TEXT PRIMARY KEY,
-    run_id          TEXT NOT NULL REFERENCES runs(run_id),
+    run_id          TEXT REFERENCES runs(run_id),   -- NULL for a request raised from the Requests page
     kind            TEXT NOT NULL,        -- unblock_supplier | onboard_supplier | raise_po | amend_po | other
     note            TEXT NOT NULL DEFAULT '',
     status          TEXT NOT NULL DEFAULT 'open',   -- open | resolved | declined
@@ -113,8 +113,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     resolved_by     TEXT,
     resolution_note TEXT,
     resolved_at     TEXT,
-    supplier_id     TEXT,                 -- the supplier an unblock request is about (pinned at creation)
-    known_pos       TEXT                  -- JSON: orders that already existed when the request was made
+    supplier_id     TEXT,                 -- the supplier the request is about (pinned at creation)
+    known_pos       TEXT,                 -- JSON: orders that already existed when the request was made
+    subject         TEXT                  -- e.g. the supplier name to onboard, for standalone requests
 );
 
 CREATE TABLE IF NOT EXISTS policies (
@@ -139,7 +140,34 @@ MIGRATIONS = [
      "UPDATE invoices SET currency='USD' WHERE currency IS NULL"),
     ("tickets", "supplier_id", "ALTER TABLE tickets ADD COLUMN supplier_id TEXT", None),
     ("tickets", "known_pos", "ALTER TABLE tickets ADD COLUMN known_pos TEXT", None),
+    ("tickets", "subject", "ALTER TABLE tickets ADD COLUMN subject TEXT", None),
 ]
+
+
+def _relax_ticket_run(conn: sqlite3.Connection) -> None:
+    """Older databases created tickets.run_id NOT NULL; standalone requests
+    need it optional. SQLite cannot alter a constraint, so rebuild the table
+    once, keeping every row."""
+    info = {r[1]: r for r in conn.execute("PRAGMA table_info(tickets)")}
+    if not info or info["run_id"][3] == 0:   # notnull flag
+        return
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.executescript("""
+        BEGIN;
+        CREATE TABLE tickets_new (
+            ticket_id TEXT PRIMARY KEY, run_id TEXT REFERENCES runs(run_id), kind TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', requested_by TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')), resolved_by TEXT, resolution_note TEXT,
+            resolved_at TEXT, supplier_id TEXT, known_pos TEXT, subject TEXT);
+        INSERT INTO tickets_new (ticket_id, run_id, kind, note, status, requested_by, created_at, resolved_by,
+            resolution_note, resolved_at, supplier_id, known_pos)
+          SELECT ticket_id, run_id, kind, note, status, requested_by, created_at, resolved_by,
+            resolution_note, resolved_at, supplier_id, known_pos FROM tickets;
+        DROP TABLE tickets;
+        ALTER TABLE tickets_new RENAME TO tickets;
+        COMMIT;
+    """)
+    conn.execute("PRAGMA foreign_keys=ON")
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -169,6 +197,7 @@ def connect(path: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     _migrate(conn)
+    _relax_ticket_run(conn)
     conn.execute("UPDATE vendors SET aliases='[]' WHERE aliases IS NULL OR aliases=''")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS runs_idem ON runs(idempotency_key) "
                  "WHERE idempotency_key IS NOT NULL")

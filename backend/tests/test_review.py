@@ -851,3 +851,34 @@ def test_invoices_are_grouped_under_their_purchase_order(env):
     runs = [i["run_id"] for i in invoices_by_po(conn)["PO-1001"] if not i["posted"]]
     assert runs == [out.run_id]
     assert "PO-9999" not in grouped
+
+
+def test_standalone_requests_close_themselves_like_invoice_ones(env):
+    from app.review import (create_po, list_tickets, onboard_vendor, open_standalone_request, resolve_ticket,
+                            settle_requests, update_vendor)
+    conn, _ = env
+    with pytest.raises(ReviewError):
+        open_standalone_request(conn, "onboard_supplier", "x", "reviewer@demo", subject="Northwind Supplies LLC")  # already approved
+    with pytest.raises(ReviewError):
+        open_standalone_request(conn, "unblock_supplier", "x", "reviewer@demo")
+    t = open_standalone_request(conn, "onboard_supplier", "new vendor", "reviewer@demo", subject="Orbit Tools GmbH")
+    again = open_standalone_request(conn, "onboard_supplier", "again", "reviewer@demo", subject="orbit tools gmbh")
+    assert again["existing"] and again["ticket_id"] == t["ticket_id"]
+    listed = list_tickets(conn, "open")[0]
+    assert listed["standalone"] and listed["supplier_name"] == "Orbit Tools GmbH" and listed["fulfilled"] is False
+    with pytest.raises(ReviewError):
+        resolve_ticket(conn, t["ticket_id"], "resolved", "done", "procurement@demo")    # record does not show it
+    onboard_vendor(conn, "Orbit Tools GmbH", None, "procurement@demo")
+    settled = settle_requests(conn, "procurement@demo")
+    assert [s["ticket_id"] for s in settled] == [t["ticket_id"]] and "Done by procurement" in settled[0]["resolution_note"]
+    # an alias satisfies it too
+    t2 = open_standalone_request(conn, "onboard_supplier", "sub", "reviewer@demo", subject="Orbit Tools Nordic")
+    update_vendor(conn, conn.execute("SELECT supplier_id FROM vendors WHERE name='Orbit Tools GmbH'").fetchone()["supplier_id"],
+                  add_aliases=["Orbit Tools Nordic"])
+    assert [s["ticket_id"] for s in settle_requests(conn, "procurement@demo")] == [t2["ticket_id"]]
+    # raise_po for an existing supplier: only a NEW order answers it
+    t3 = open_standalone_request(conn, "raise_po", "Q4 budget", "reviewer@demo", supplier_id="sup-northwind")
+    assert settle_requests(conn, "procurement@demo") == []
+    create_po(conn, "PO-1077", "sup-northwind", "USD", "3000.00", "procurement@demo")
+    settled = settle_requests(conn, "procurement@demo")
+    assert [s["ticket_id"] for s in settled] == [t3["ticket_id"]] and "PO-1077" in settled[0]["resolution_note"]

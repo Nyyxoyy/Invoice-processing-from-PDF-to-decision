@@ -783,6 +783,69 @@ TICKET_KINDS = {
 }
 
 
+STANDALONE_KINDS = {"onboard_supplier": "Onboard a new supplier", "raise_po": "Raise a purchase order for a supplier"}
+
+
+def open_standalone_request(conn, kind: str, note: str, requested_by: str,
+                            subject: str | None = None, supplier_id: str | None = None) -> dict:
+    """A request raised from the Requests page, not from an invoice: onboard a
+    named supplier, or raise an order for an existing supplier. Fulfilment is
+    derived the same way (the record decides), so it closes itself too."""
+    from .pipeline import resolve_vendor
+    if kind not in STANDALONE_KINDS:
+        raise ReviewError(422, "a standalone request can onboard a supplier or raise a purchase order")
+    subject = " ".join((subject or "").split())
+    if kind == "onboard_supplier":
+        if len(subject) < 2:
+            raise ReviewError(422, "Give the supplier's name.")
+        v = resolve_vendor(conn, subject)
+        if v is not None and v["status"] == "approved":
+            raise ReviewError(409, f"Nothing to request: {v['name']} is already an approved supplier.")
+        supplier_id = None
+        dup = conn.execute("SELECT * FROM tickets WHERE run_id IS NULL AND kind='onboard_supplier' AND status='open' "
+                           "AND lower(subject)=lower(?)", (subject,)).fetchone()
+    else:
+        v = conn.execute("SELECT * FROM vendors WHERE supplier_id=?", (supplier_id or "",)).fetchone()
+        if v is None:
+            raise ReviewError(422, "Choose the supplier the order is for.")
+        subject = v["name"]
+        dup = conn.execute("SELECT * FROM tickets WHERE run_id IS NULL AND kind='raise_po' AND status='open' "
+                           "AND supplier_id=?", (supplier_id,)).fetchone()
+    if dup:
+        return {**dict(dup), "existing": True}
+    known = json.dumps([r["po_id"] for r in conn.execute(
+        "SELECT po_id FROM pos WHERE supplier_id=? AND status='open'", (supplier_id or "",))]) if supplier_id else "[]"
+    ticket_id = _uid("tk")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            "INSERT INTO tickets (ticket_id, run_id, kind, note, requested_by, supplier_id, known_pos, subject) "
+            "VALUES (?, NULL, ?, ?, ?, ?, ?, ?)",
+            (ticket_id, kind, (note or "").strip(), requested_by, supplier_id, known, subject))
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    return {**dict(conn.execute("SELECT * FROM tickets WHERE ticket_id=?", (ticket_id,)).fetchone()), "existing": False}
+
+
+def _standalone_fulfilled(conn, row: dict) -> tuple[bool, str | None]:
+    from .pipeline import resolve_vendor
+    if row["kind"] == "onboard_supplier":
+        v = resolve_vendor(conn, row.get("subject") or "")
+        if v is not None and v["status"] == "approved":
+            return True, f"{v['name']} is an approved supplier."
+        return False, None
+    if row["kind"] == "raise_po":
+        known = set(json.loads(row.get("known_pos") or "[]"))
+        new = [r["po_id"] for r in conn.execute(
+            "SELECT po_id FROM pos WHERE supplier_id=? AND status='open'", (row.get("supplier_id"),)) if r["po_id"] not in known]
+        if new:
+            return True, f"Order {', '.join(new)} is available for {row.get('subject') or 'the supplier'}."
+        return False, None
+    return False, None
+
+
 def open_ticket(conn, run_id: str, kind: str, note: str, requested_by: str) -> dict:
     """Reviewer asks procurement for something they cannot do themselves.
     One open ticket per invoice and kind; a repeat returns the existing one."""
@@ -853,6 +916,8 @@ def ticket_fulfilled(conn, row) -> tuple[bool, str | None]:
     Returns (fulfilled, one-sentence fact). 'other' requests are never derived."""
     row = dict(row)
     kind = row["kind"]
+    if not row.get("run_id"):
+        return _standalone_fulfilled(conn, row)
     run_id = latest_run_in_lineage(conn, row["run_id"])
     known = set(json.loads(row.get("known_pos") or "[]"))   # orders that existed when the request was made
     pinned = row.get("supplier_id")
@@ -939,10 +1004,12 @@ def settle_requests(conn, actor: str) -> list[dict]:
         fulfilled, fact = ticket_fulfilled(conn, row)
         if not fulfilled:
             continue
-        current = latest_run_in_lineage(conn, row["run_id"])
+        current = latest_run_in_lineage(conn, row["run_id"]) if row["run_id"] else None
         note = f"{fact} {_NEXT_STEP.get(row['kind'], '')}".strip()
         if fact and "checks out" in fact:
             note = f"{fact} Check the invoice again."
+        if not row["run_id"]:
+            note = f"{fact} Done by procurement."
         conn.execute("BEGIN IMMEDIATE")
         try:
             conn.execute(
@@ -950,9 +1017,10 @@ def settle_requests(conn, actor: str) -> list[dict]:
                 "WHERE ticket_id=? AND status='open'", (actor, note, row["ticket_id"]))
             payload = {"ticket_id": row["ticket_id"], "kind": row["kind"], "note": note, "actor": actor,
                        "fulfilled": True, "fact": fact, "auto": True}
-            ledger._emit(conn, row["run_id"], "REQUEST", "ticket_resolved", payload)
-            if current != row["run_id"]:   # the reviewer is on a Check-again run: show it there too
-                ledger._emit(conn, current, "REQUEST", "ticket_resolved", payload)
+            if row["run_id"]:
+                ledger._emit(conn, row["run_id"], "REQUEST", "ticket_resolved", payload)
+                if current != row["run_id"]:   # the reviewer is on a Check-again run: show it there too
+                    ledger._emit(conn, current, "REQUEST", "ticket_resolved", payload)
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
@@ -999,7 +1067,7 @@ def resolve_ticket(conn, ticket_id: str, outcome: str, note: str, resolved_by: s
         raise ReviewError(409, f"request already {row['status']}")
     fulfilled, fact = ticket_fulfilled(conn, row)
     latest = conn.execute("SELECT disposition FROM runs WHERE run_id=?",
-                          (latest_run_in_lineage(conn, row["run_id"]),)).fetchone()
+                          (latest_run_in_lineage(conn, row["run_id"]),)).fetchone() if row["run_id"] else None
     invoice_final = latest is not None and latest["disposition"] in ("approved", "rejected") \
         and not (latest["disposition"] == "rejected" and _rejected_only_for_blocked_supplier(conn, latest_run_in_lineage(conn, row["run_id"])))
     if invoice_final:
@@ -1017,9 +1085,10 @@ def resolve_ticket(conn, ticket_id: str, outcome: str, note: str, resolved_by: s
         conn.execute(
             "UPDATE tickets SET status=?, resolved_by=?, resolution_note=?, resolved_at=datetime('now') WHERE ticket_id=?",
             (outcome, resolved_by, (note or "").strip(), ticket_id))
-        ledger._emit(conn, row["run_id"], "REQUEST", "ticket_" + outcome,
-                     {"ticket_id": ticket_id, "kind": row["kind"], "note": (note or "").strip(), "actor": resolved_by,
-                      "fulfilled": fulfilled, "fact": fact})
+        if row["run_id"]:
+            ledger._emit(conn, row["run_id"], "REQUEST", "ticket_" + outcome,
+                         {"ticket_id": ticket_id, "kind": row["kind"], "note": (note or "").strip(), "actor": resolved_by,
+                          "fulfilled": fulfilled, "fact": fact})
         conn.execute("COMMIT")
     except BaseException:
         conn.execute("ROLLBACK")
@@ -1040,15 +1109,16 @@ def list_tickets(conn, status: str = "open", run_id: str | None = None,
         where.append("r.document_id=?"); args.append(document_id)
     sql = ("SELECT t.*, d.filename, r.document_id, "
            "(SELECT fields_json FROM field_revisions f WHERE f.run_id=t.run_id ORDER BY seq DESC LIMIT 1) AS fields_json "
-           "FROM tickets t JOIN runs r USING (run_id) JOIN documents d USING (document_id) "
+           "FROM tickets t LEFT JOIN runs r ON r.run_id = t.run_id LEFT JOIN documents d ON d.document_id = r.document_id "
            + ("WHERE " + " AND ".join(where) if where else "") + " ORDER BY t.created_at DESC")
     out = []
     for row in conn.execute(sql, args).fetchall():
         item = dict(row)
         fields = json.loads(item.pop("fields_json") or "{}")
-        item["supplier_name"] = (fields.get("supplier_name") or {}).get("raw_value")
+        item["supplier_name"] = (fields.get("supplier_name") or {}).get("raw_value") or item.get("subject")
         item["po_reference"] = (fields.get("po_reference") or {}).get("raw_value")
-        item["kind_label"] = TICKET_KINDS.get(item["kind"], item["kind"])
+        item["standalone"] = item.get("run_id") is None
+        item["kind_label"] = (STANDALONE_KINDS if item["standalone"] else TICKET_KINDS).get(item["kind"], item["kind"])
         if item["status"] == "open":
             try:
                 item["fulfilled"], item["fact"] = ticket_fulfilled(conn, row)
