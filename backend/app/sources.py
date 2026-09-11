@@ -283,10 +283,16 @@ def build_sources(data_dir: str) -> dict:
 def describe_sources() -> list[dict]:
     out = []
     for k in SOURCE_ORDER:
-        if k in SOURCES:
-            st = SOURCES[k].status()
-            st.setdefault("mode", "files")
-            out.append(st)
+        if k not in SOURCES:
+            continue
+        st = SOURCES[k].status()
+        st.setdefault("mode", "files")
+        # Shared Drive folders are already covered by the watched-folder link
+        # mode; the service-account Drive connector (private folders) is only
+        # worth showing once a deployment has actually configured it.
+        if k == "gdrive" and not st["configured"]:
+            continue
+        out.append(st)
     return out
 
 

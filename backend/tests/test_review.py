@@ -6,11 +6,16 @@ import app.pipeline as pipeline
 from app.db import connect
 from app.ledger import consumed_minor
 from app.main import seed_if_empty
-from app.policy import DEFAULT_POLICY
 from app.review import (ReviewError, attest_fields, correct_field, load_latest,
                         reevaluate, reject)
 from app.rules import Code, Route
-from tests.test_pipeline import make_pdf, stub_extract
+from tests.test_pipeline import TICKET_POLICY, make_pdf, stub_extract
+
+# This module is about the review flow itself — correct, attest, re-evaluate,
+# onboard, approve — which only exists for invoices that were HELD. It therefore
+# runs with unknown suppliers set to "ticket". The product default rejects them
+# instead; that path is covered in tests/test_unknown_supplier.py.
+POLICY = TICKET_POLICY
 
 
 @pytest.fixture
@@ -26,7 +31,7 @@ def held_run(env, name="held", **kw):
     conn, data_dir = env
     path = f"{data_dir}/{name}.pdf"
     make_pdf(path, **kw)
-    r = pipeline.process_document(conn, path, f"{name}.pdf", DEFAULT_POLICY, data_dir)
+    r = pipeline.process_document(conn, path, f"{name}.pdf", POLICY, data_dir)
     return r
 
 
@@ -41,7 +46,7 @@ def test_correct_unknown_vendor_then_approve_posts_once(env):
                             "reviewer@demo", expected_seq=seq)
     assert new_seq == seq + 1
 
-    out = reevaluate(conn, r.run_id, "reviewer@demo", "idem-1", DEFAULT_POLICY)
+    out = reevaluate(conn, r.run_id, "reviewer@demo", "idem-1", POLICY)
     assert out.decision.route == Route.AUTO_APPROVE and out.posted
     assert out.run_id != r.run_id  # new review run; original preserved
     row = conn.execute("SELECT decision_mode, kind, parent_run_id FROM runs WHERE run_id=?",
@@ -53,7 +58,7 @@ def test_correct_unknown_vendor_then_approve_posts_once(env):
     assert consumed_minor(conn, "PO-1001") == 649500
 
     # idempotent replay: same key returns prior result, no second posting
-    replay = reevaluate(conn, r.run_id, "reviewer@demo", "idem-1", DEFAULT_POLICY)
+    replay = reevaluate(conn, r.run_id, "reviewer@demo", "idem-1", POLICY)
     assert replay["idempotent_replay"] is True
     assert consumed_minor(conn, "PO-1001") == 649500
 
@@ -77,7 +82,7 @@ def test_reviewer_cannot_bypass_duplicate(env):
                   subtotal="$6,465.00", tax="$535.00")
     assert r2.decision.route == Route.HOLD_REVIEW
     assert Code.CONTENT_CONFLICT in r2.decision.codes
-    out = reevaluate(conn, r2.run_id, "reviewer@demo", "idem-dup", DEFAULT_POLICY)
+    out = reevaluate(conn, r2.run_id, "reviewer@demo", "idem-dup", POLICY)
     # fresh duplicate check decides; a reviewer approve is not an override
     assert out.decision.route in (Route.REJECT, Route.HOLD_REVIEW)
     assert not out.posted
@@ -89,7 +94,7 @@ def test_reviewer_cannot_bypass_budget(env):
     r = held_run(env, name="big", invoice_no="NW-BIG-1", total="$10,600.00",
                  subtotal="$9,790.30", tax="$809.70")
     assert Code.PO_BUDGET_EXCEEDED in r.decision.codes
-    out = reevaluate(conn, r.run_id, "reviewer@demo", "idem-big", DEFAULT_POLICY)
+    out = reevaluate(conn, r.run_id, "reviewer@demo", "idem-big", POLICY)
     assert out.decision.route == Route.HOLD_REVIEW
     assert Code.PO_BUDGET_EXCEEDED in out.decision.codes
     assert consumed_minor(conn, "PO-1001") == 0
@@ -111,7 +116,7 @@ def test_attestation_clears_scan_gate(env):
 
     # reviewer supplies the PO, but fields are still unattested scan reads
     seq = correct_field(conn, r.run_id, "po_reference", "PO-1001", "reviewer@demo", seq)
-    out1 = reevaluate(conn, r.run_id, "reviewer@demo", "idem-scan-1", DEFAULT_POLICY)
+    out1 = reevaluate(conn, r.run_id, "reviewer@demo", "idem-scan-1", POLICY)
     assert out1.decision.route == Route.HOLD_REVIEW
     assert Code.REVIEW_REQUIRED_SCAN in out1.decision.codes
     assert not out1.posted
@@ -121,7 +126,7 @@ def test_attestation_clears_scan_gate(env):
     attest_fields(conn, r.run_id,
                   [f for f, v in fields.items() if v.status == "selected" and v.read_method == "llm_vision"],
                   "reviewer@demo", seq)
-    out2 = reevaluate(conn, r.run_id, "reviewer@demo", "idem-scan-2", DEFAULT_POLICY)
+    out2 = reevaluate(conn, r.run_id, "reviewer@demo", "idem-scan-2", POLICY)
     assert out2.decision.route == Route.AUTO_APPROVE and out2.posted
     assert consumed_minor(conn, "PO-1001") == 649500
 
@@ -162,7 +167,7 @@ def test_delete_run_guards_and_orphans(env):
     conn.execute("DELETE FROM runs WHERE run_id=?", (held.run_id,))
     conn.execute("DELETE FROM documents WHERE document_id=?", (row["document_id"],))
     # same bytes reprocess: no L1 duplicate anymore
-    r2 = pipeline.process_document(conn, f"{data_dir}/delme.pdf", "delme.pdf", DEFAULT_POLICY, data_dir)
+    r2 = pipeline.process_document(conn, f"{data_dir}/delme.pdf", "delme.pdf", POLICY, data_dir)
     assert Code.DUP_FILE_HASH not in r2.decision.codes
 
     # posted runs are protected
@@ -172,19 +177,20 @@ def test_delete_run_guards_and_orphans(env):
 
 
 def test_diagnosis_covers_every_code_and_flags_business_fields(env):
-    """The Bioplex gap: fields that extract perfectly but fail business rules
+    """The Bioplex gap (named for fixtures/pdfs/invoice-0-4.pdf): fields that
+    extract perfectly but fail business rules
     must be flagged, and every decision code must become one checklist item."""
     from app.review import diagnose_run
     conn, data_dir = env
     import fitz
     path = f"{data_dir}/bioplex-like.pdf"
     doc = fitz.open(); page = doc.new_page(); y = 60
-    for row in ["Bioplex", "Invoice No: BPX-1", "Invoice Date: 2021-05-23",
-                "PO Reference: BPXPO-00536", "Line item (BPXPO-00537)", "Bill To: Roger Bigot",
+    for row in ["Meridian Freight SARL", "Invoice No: MRD-1", "Invoice Date: 2021-05-23",
+                "PO Reference: MRDPO-00536", "Line item (MRDPO-00537)", "Bill To: Roger Bigot",
                 "Subtotal: 5964.50", "Sales Tax: 596.45", "Total: 6560.95"]:   # no currency anywhere
         page.insert_text((50, y), row, fontsize=11); y += 22
     doc.save(path)
-    r = pipeline.process_document(conn, path, "bioplex-like.pdf", DEFAULT_POLICY, data_dir)
+    r = pipeline.process_document(conn, path, "bioplex-like.pdf", POLICY, data_dir)
     assert r.decision.route == Route.HOLD_REVIEW
     codes = {c.value for c in r.decision.codes}
     assert {"VENDOR_UNKNOWN", "PO_MULTIPLE_REFS", "AMBIGUOUS_CURRENCY"} <= codes
@@ -197,8 +203,8 @@ def test_diagnosis_covers_every_code_and_flags_business_fields(env):
     assert "supplier_name" in d["field_problems"]
     assert "po_reference" in d["field_problems"]
     assert "currency" in d["field_problems"]
-    assert "BPXPO-00536" in d["field_problems"]["po_reference"]["why"]
-    assert "BPXPO-00537" in d["field_problems"]["po_reference"]["why"]
+    assert "MRDPO-00536" in d["field_problems"]["po_reference"]["why"]
+    assert "MRDPO-00537" in d["field_problems"]["po_reference"]["why"]
     assert "vendor master" in d["field_problems"]["supplier_name"]["why"]
     # every fixable item points at a field that is actually flagged
     for item in d["items"]:
@@ -221,20 +227,20 @@ def test_onboard_vendor_and_create_po_unblock_hold(env):
     then re-evaluation, must post — once, as a reviewer decision."""
     from app.review import create_po, onboard_vendor
     conn, _ = env
-    r = held_run(env, name="newco", supplier="Bioplex", invoice_no="BPX-9", po="BPXPO-00536",
+    r = held_run(env, name="newco", supplier="Meridian Freight SARL", invoice_no="MRD-9", po="MRDPO-00536",
                  total="$6,610.95", subtotal="$5,964.50", tax="$596.45", shipping="$50.00")
     assert Code.VENDOR_UNKNOWN in r.decision.codes
-    v = onboard_vendor(conn, "Bioplex", "FR", "procurement@demo", run_id=r.run_id)
+    v = onboard_vendor(conn, "Meridian Freight SARL", "FR", "procurement@demo", run_id=r.run_id)
     assert v["status"] == "approved"
     with pytest.raises(ReviewError):
         onboard_vendor(conn, "bioplex", None, "x")  # duplicate, case-insensitive
-    po = create_po(conn, "BPXPO-00536", v["supplier_id"], "usd", "10000.00", "procurement@demo", run_id=r.run_id)
+    po = create_po(conn, "MRDPO-00536", v["supplier_id"], "usd", "10000.00", "procurement@demo", run_id=r.run_id)
     assert po["amount_minor"] == 1_000_000 and po["currency"] == "USD"
     with pytest.raises(ReviewError):
-        create_po(conn, "BPXPO-99", v["supplier_id"], "USD", "10.005", "x")  # sub-cent precision
-    out = reevaluate(conn, r.run_id, "reviewer@demo", "idem-newco", DEFAULT_POLICY)
+        create_po(conn, "MRDPO-99", v["supplier_id"], "USD", "10.005", "x")  # sub-cent precision
+    out = reevaluate(conn, r.run_id, "reviewer@demo", "idem-newco", POLICY)
     assert out.decision.route == Route.AUTO_APPROVE and out.posted
-    assert consumed_minor(conn, "BPXPO-00536") == 661_095
+    assert consumed_minor(conn, "MRDPO-00536") == 661_095
     ev = conn.execute("SELECT event_type FROM run_events WHERE run_id=? AND stage='MASTER' ORDER BY seq",
                       (r.run_id,)).fetchall()
     assert [e["event_type"] for e in ev] == ["vendor_onboarded", "po_created"]
@@ -246,11 +252,11 @@ def test_diagnosis_tracks_progress_before_reevaluation(env):
     pipeline to re-run. Otherwise the PO step stays hidden (the dead-end)."""
     from app.review import diagnose_run, onboard_vendor
     conn, _ = env
-    r = held_run(env, name="progress", supplier="Bioplex", invoice_no="BPX-P1", po="BPXPO-00536")
+    r = held_run(env, name="progress", supplier="Meridian Freight SARL", invoice_no="MRD-P1", po="MRDPO-00536")
     seq, fields, context = load_latest(conn, r.run_id)
     d0 = diagnose_run(conn, r.run_id, fields, context)
     assert "VENDOR_UNKNOWN" in d0["open_codes"] and "supplier_name" in d0["field_problems"]
-    onboard_vendor(conn, "Bioplex", "FR", "procurement@demo", run_id=r.run_id)
+    onboard_vendor(conn, "Meridian Freight SARL", "FR", "procurement@demo", run_id=r.run_id)
     d1 = diagnose_run(conn, r.run_id, fields, context)
     assert "VENDOR_UNKNOWN" not in d1["open_codes"]
     assert "supplier_name" not in d1["field_problems"]
@@ -345,7 +351,7 @@ def test_ticket_lifecycle_and_blocked_supplier_recheck(env):
     assert events == ["ticket_opened", "ticket_resolved"]
 
     # reviewer re-checks the rejected invoice: allowed only because the sole cause was the block
-    out = reevaluate(conn, r.run_id, "reviewer@demo", "idem-unblocked", DEFAULT_POLICY)
+    out = reevaluate(conn, r.run_id, "reviewer@demo", "idem-unblocked", POLICY)
     assert out.decision.route == Route.AUTO_APPROVE and out.posted
 
 
@@ -356,7 +362,7 @@ def test_other_rejections_stay_final(env):
     dup = held_run(env, name="dup-b", invoice_no="NW-FINAL-1")
     assert dup.decision.route == Route.REJECT and Code.DUP_INVOICE_NO in dup.decision.codes
     with pytest.raises(ReviewError) as e:
-        reevaluate(conn, dup.run_id, "reviewer@demo", "idem-dup", DEFAULT_POLICY)
+        reevaluate(conn, dup.run_id, "reviewer@demo", "idem-dup", POLICY)
     assert e.value.status == 409
 
 
@@ -371,7 +377,7 @@ def test_reviewer_can_clear_a_same_day_fingerprint_with_a_reason(env):
     assert a.posted and b.decision.route == Route.HOLD_REVIEW and Code.DUP_FINGERPRINT in b.decision.codes
 
     # still held without attestation
-    out0 = reevaluate(conn, b.run_id, "reviewer@demo", "fp-idem-0", DEFAULT_POLICY)
+    out0 = reevaluate(conn, b.run_id, "reviewer@demo", "fp-idem-0", POLICY)
     assert out0.decision.route == Route.HOLD_REVIEW and Code.DUP_FINGERPRINT in out0.decision.codes
 
     seq, _, _ = load_latest(conn, b.run_id)
@@ -379,7 +385,7 @@ def test_reviewer_can_clear_a_same_day_fingerprint_with_a_reason(env):
         confirm_not_duplicate(conn, b.run_id, "reviewer@demo", "ok", seq)   # reason required
     seq = confirm_not_duplicate(conn, b.run_id, "reviewer@demo",
                                 "Two deliveries the same morning; invoice numbers A and B, both on the delivery notes.", seq)
-    out = reevaluate(conn, b.run_id, "reviewer@demo", "fp-idem-1", DEFAULT_POLICY)
+    out = reevaluate(conn, b.run_id, "reviewer@demo", "fp-idem-1", POLICY)
     assert out.decision.route == Route.AUTO_APPROVE and out.posted
     assert consumed_minor(conn, "PO-1001") == 100_000
     ev = [e["event_type"] for e in conn.execute(
@@ -403,7 +409,7 @@ def test_tickets_follow_the_invoice_across_check_again_runs(env):
     assert Code.VENDOR_UNKNOWN in r.decision.codes
     t = open_ticket(conn, r.run_id, "onboard_supplier", "new supplier, contract attached", "reviewer@demo")
     doc = conn.execute("SELECT document_id FROM runs WHERE run_id=?", (r.run_id,)).fetchone()["document_id"]
-    child = reevaluate(conn, r.run_id, "reviewer@demo", "lineage-1", DEFAULT_POLICY)
+    child = reevaluate(conn, r.run_id, "reviewer@demo", "lineage-1", POLICY)
     assert child.run_id != r.run_id
     assert list_tickets(conn, "all", run_id=child.run_id) == []
     by_doc = list_tickets(conn, "all", document_id=doc)
@@ -428,7 +434,7 @@ def test_check_again_resolves_the_po_like_the_first_reading(env):
     fields["po_reference"] = replace(fields["po_reference"], raw_value="PO Reference: PO-1001")
     seq = save_revision(conn, b.run_id, "extraction", None, fields, context)
     seq = confirm_not_duplicate(conn, b.run_id, "reviewer@demo", "separate delivery, separate invoice number", seq)
-    out = reevaluate(conn, b.run_id, "reviewer@demo", "lbl-1", DEFAULT_POLICY)
+    out = reevaluate(conn, b.run_id, "reviewer@demo", "lbl-1", POLICY)
     assert out.decision.route == Route.AUTO_APPROVE and out.posted, out.decision.codes
 
     # no PO field selected at all, but the document scan found one reference
@@ -438,7 +444,7 @@ def test_check_again_resolves_the_po_like_the_first_reading(env):
     context["po_references"] = ["PO-1001"]
     seq = save_revision(conn, c.run_id, "extraction", None, fields, context)
     seq = confirm_not_duplicate(conn, c.run_id, "reviewer@demo", "third delivery the same day", seq)
-    out = reevaluate(conn, c.run_id, "reviewer@demo", "lbl-2", DEFAULT_POLICY)
+    out = reevaluate(conn, c.run_id, "reviewer@demo", "lbl-2", POLICY)
     assert out.decision.route == Route.AUTO_APPROVE and out.posted, out.decision.codes
     assert consumed_minor(conn, "PO-1001") == 150_000
 
@@ -598,7 +604,7 @@ def test_onboard_request_is_done_only_with_a_purchase_order(env):
     assert ok is True and "approved supplier" in fact
     done = resolve_ticket(conn, t["ticket_id"], "resolved", "Supplier and PO-7000 added. Check again.", "procurement@demo")
     assert done["status"] == "resolved"
-    out = reevaluate(conn, r.run_id, "reviewer@demo", "onb-po-1", DEFAULT_POLICY)
+    out = reevaluate(conn, r.run_id, "reviewer@demo", "onb-po-1", POLICY)
     assert out.decision.route == Route.AUTO_APPROVE and out.posted
 
 
@@ -668,7 +674,7 @@ def test_requests_follow_the_reviewer_to_check_again_runs_and_close_there(env):
     conn, _ = env
     r1 = held_run(env, name="lin-1", supplier="Unknown Widgets Ltd", invoice_no="UW-L1", po="PO-1001")
     t = open_ticket(conn, r1.run_id, "onboard_supplier", "new supplier", "reviewer@demo")
-    r2 = reevaluate(conn, r1.run_id, "reviewer@demo", "lin-idem-1", DEFAULT_POLICY)   # still held
+    r2 = reevaluate(conn, r1.run_id, "reviewer@demo", "lin-idem-1", POLICY)   # still held
     assert r2.decision.route == Route.HOLD_REVIEW and latest_run_in_lineage(conn, r1.run_id) == r2.run_id
     seq, _, _ = load_latest(conn, r2.run_id)
     correct_field(conn, r2.run_id, "supplier_name", "Northwind Supplies LLC", "reviewer@demo", seq)  # approved, has PO-1001
@@ -713,14 +719,14 @@ def test_final_decisions_close_leftover_requests_but_not_the_blocked_one(env):
     seq, _, _ = load_latest(conn, r2.run_id)
     from app.review import correct_field
     correct_field(conn, r2.run_id, "po_reference", "PO-1001", "reviewer@demo", seq)
-    out = reevaluate(conn, r2.run_id, "reviewer@demo", "fin-appr-2", DEFAULT_POLICY)
+    out = reevaluate(conn, r2.run_id, "reviewer@demo", "fin-appr-2", POLICY)
     assert out.posted
     assert conn.execute("SELECT status FROM tickets WHERE ticket_id=?", (t2["ticket_id"],)).fetchone()["status"] == "declined"
     # a blocked-supplier rejection on Check again keeps the unblock request alive
     create_po(conn, "PO-SH-F", "sup-shady", "USD", "5000.00", "procurement@demo")
     r3 = held_run(env, name="fin-3", supplier="Shady Imports Co", invoice_no="SH-F3", po="PO-SH-F")
     t3 = open_ticket(conn, r3.run_id, "unblock_supplier", "genuine", "reviewer@demo")
-    out3 = reevaluate(conn, r3.run_id, "reviewer@demo", "fin-blk-3", DEFAULT_POLICY)
+    out3 = reevaluate(conn, r3.run_id, "reviewer@demo", "fin-blk-3", POLICY)
     assert out3.decision.route == Route.REJECT
     assert conn.execute("SELECT status FROM tickets WHERE ticket_id=?", (t3["ticket_id"],)).fetchone()["status"] == "open"
     # the unblock request is about Shady, not whoever the field names later
@@ -749,7 +755,7 @@ def test_unknown_name_mapped_to_an_existing_supplier_by_reviewer_or_by_alias(env
     diag = diagnose_run(conn, r.run_id, fields, context)
     assert next(i for i in diag["items"] if i["code"] == "VENDOR_UNKNOWN")["status"] == "resolved"
     assert fields["supplier_name"].evidence["corrected_from"] == "White Group"
-    out = reevaluate(conn, r.run_id, "reviewer@demo", "child-idem-1", DEFAULT_POLICY)
+    out = reevaluate(conn, r.run_id, "reviewer@demo", "child-idem-1", POLICY)
     assert out.decision.route == Route.AUTO_APPROVE and out.posted
     assert conn.execute("SELECT supplier_id FROM invoices WHERE invoice_id=?", (out.invoice_id,)).fetchone()["supplier_id"] == "sup-northwind"
 
@@ -791,13 +797,13 @@ def test_budget_forecast_matches_the_rule_before_check_again(env):
     gross, cur = invoice_gross_minor(fields, context)
     assert (gross, cur) == (649_500, "USD")
     po_small = conn.execute("SELECT * FROM pos WHERE po_id='PO-1003'").fetchone()    # USD 5,000
-    fc = budget_forecast(conn, po_small, gross, cur, DEFAULT_POLICY)
+    fc = budget_forecast(conn, po_small, gross, cur, POLICY)
     assert fc["status"] == "exceeded" and fc["remaining_minor"] == 500_000
     assert fc["short_minor"] == 649_500 - 500_000 - max(500_000 * 5 // 100, 5_000)   # overage beyond the 5% band
     po_big = conn.execute("SELECT * FROM pos WHERE po_id='PO-1002'").fetchone()      # USD 30,000
-    assert budget_forecast(conn, po_big, gross, cur, DEFAULT_POLICY)["status"] == "ok"
+    assert budget_forecast(conn, po_big, gross, cur, POLICY)["status"] == "ok"
     eur = conn.execute("SELECT * FROM pos WHERE po_id='PO-2001'").fetchone()
-    assert budget_forecast(conn, eur, gross, cur, DEFAULT_POLICY)["status"] is None  # other currency: no forecast
+    assert budget_forecast(conn, eur, gross, cur, POLICY)["status"] is None  # other currency: no forecast
 
 
 def test_a_null_aliases_column_never_breaks_vendor_resolution(env):
@@ -848,7 +854,7 @@ def test_invoices_are_grouped_under_their_purchase_order(env):
     assert [i["invoice_no"] for i in under if not i["posted"]] == ["NW-G2"]
     assert under[1]["disposition"] == "held" and under[1]["amount_raw"] == "USD 9,000.00"   # display form
     # a Check again on the held one moves the group entry to the newest run only
-    out = reevaluate(conn, held.run_id, "reviewer@demo", "grp-idem", DEFAULT_POLICY)
+    out = reevaluate(conn, held.run_id, "reviewer@demo", "grp-idem", POLICY)
     runs = [i["run_id"] for i in invoices_by_po(conn)["PO-1001"] if not i["posted"]]
     assert runs == [out.run_id]
     assert "PO-9999" not in grouped

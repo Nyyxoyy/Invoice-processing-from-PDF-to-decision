@@ -7,6 +7,12 @@ from decimal import Decimal
 
 from .currencies import REGISTRY_VERSION
 
+# What to do with an invoice whose supplier name was read and verified but is
+# absent from the supplier register. "reject" is the safe default — an unknown
+# supplier cannot be paid; "ticket" holds the invoice and asks procurement to
+# onboard. Procurement changes this from the Suppliers page (see settings.py).
+UNKNOWN_SUPPLIER_ACTIONS = ("reject", "ticket")
+
 # rounding policy (recorded in run snapshots)
 ROUNDING_POLICY = {
     "quantize_mode": "ROUND_HALF_UP",
@@ -28,6 +34,7 @@ class Policy:
     abs_floor_minor: dict = field(default_factory=lambda: {"USD": 5000})
     tax_in_tolerance: bool = True
     dup_date_window_days: int = 30
+    unknown_vendor_action: str = "reject"  # see UNKNOWN_SUPPLIER_ACTIONS
     scan_auto_approve: bool = False
     registry_version: str = REGISTRY_VERSION
 
@@ -38,6 +45,8 @@ class Policy:
             raise ValueError("negative tolerance values are incoherent")
         if any(v < 0 for v in self.abs_floor_minor.values()):
             raise ValueError("negative absolute floor is incoherent")
+        if self.unknown_vendor_action not in UNKNOWN_SUPPLIER_ACTIONS:
+            raise ValueError(f"unsupported unknown_vendor_action: {self.unknown_vendor_action}")
 
     def floor_for(self, currency: str) -> int:
         return int(self.abs_floor_minor.get(currency, 0))

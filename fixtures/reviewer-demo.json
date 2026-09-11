@@ -38,9 +38,9 @@
   {
     "name": "reviewer-03-new-supplier.pdf",
     "title": "Summit Studio \u00b7 DEMO-7103",
-    "expect": "held",
+    "expect": "rejected",
     "blurb": "Invoice dated 3 September 2026 \u00b7 USD",
-    "next_step": "Open My requests to see the AI-created ticket. Procurement must approve the supplier and its order.",
+    "next_step": "Rejected: Summit Studio is not in the supplier register, and unknown suppliers are rejected by default. Ask procurement to onboard it and check the invoice again \u2014 or have procurement switch Unknown suppliers to \"raise an onboarding request\" on the Suppliers page.",
     "category": "Invoice collection",
     "onboarding": true
   },

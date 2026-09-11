@@ -232,6 +232,9 @@ class BatchRegistry:
         self._conn = conn
         self._lock = work_lock
         self._process = process
+        # A Policy, or a callable returning one. The app passes the callable so
+        # each document is decided under the workspace settings in force when it
+        # runs, not the ones that applied when the server booted.
         self._policy = policy
         self._data_dir = data_dir
         self._batches: dict[str, Batch] = {}
@@ -292,7 +295,9 @@ class BatchRegistry:
             item.status = "running"
             try:
                 with self._lock:
-                    result = self._process(self._conn, item.tmp_path, item.filename, self._policy, self._data_dir)
+                    result = self._process(self._conn, item.tmp_path, item.filename,
+                                           self._policy() if callable(self._policy) else self._policy,
+                                           self._data_dir)
                 item.run_id = result.run_id
                 item.route = result.decision.route.value
                 item.explanation = result.explanation

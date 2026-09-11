@@ -27,7 +27,8 @@ from .pipeline import OperationalFailure, process_document, startup_recovery
 from .intake import BatchRegistry, IntakeError, expand_uploads
 from .sources import build_sources, describe_sources, get_source
 from .ledger import CommitResult
-from .policy import DEFAULT_POLICY
+from .policy import UNKNOWN_SUPPLIER_ACTIONS
+from . import settings
 
 DATA_DIR = os.environ.get("DATA_DIR", str(Path(__file__).resolve().parents[2] / "data"))
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -72,6 +73,7 @@ def load_env_file() -> None:
 async def lifespan(app: FastAPI):
     load_env_file()
     Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
+    settings.init(DATA_DIR)
     conn = connect(str(Path(DATA_DIR) / "app.db"))
     interrupted = startup_recovery(conn)
     seed_if_empty(conn)
@@ -79,7 +81,8 @@ async def lifespan(app: FastAPI):
     app.state.conn = conn
     app.state.work_lock = threading.Lock()  # single bounded worker: one pipeline at a time
     app.state.interrupted_on_boot = interrupted
-    app.state.batches = BatchRegistry(conn, app.state.work_lock, process_document, DEFAULT_POLICY, DATA_DIR)
+    app.state.batches = BatchRegistry(conn, app.state.work_lock, process_document,
+                                      settings.current_policy, DATA_DIR)
     sources = build_sources(DATA_DIR)
 
     def folder_pickup(parts):
@@ -152,7 +155,7 @@ async def upload_invoice(file: UploadFile, user: dict = Depends(require_reviewer
     def work():
         with app.state.work_lock:
             return process_document(app.state.conn, tmp_path, file.filename or "upload.pdf",
-                                    DEFAULT_POLICY, DATA_DIR)
+                                    settings.current_policy(), DATA_DIR)
 
     try:
         result = await run_in_threadpool(work)
@@ -204,6 +207,40 @@ def batch_detail(batch_id: str):
     if batch is None:
         raise HTTPException(404, "This batch is no longer tracked. Its finished invoices are in the inbox.")
     return batch.public()
+
+
+class SettingsBody(BaseModel):
+    unknown_supplier_action: str | None = None
+
+
+UNKNOWN_SUPPLIER_LABELS = {
+    "reject": "Reject the invoice automatically",
+    "ticket": "Hold it and raise an onboarding request",
+}
+
+
+def _settings_payload() -> dict:
+    """Current switches plus the choices, so the UI never hardcodes them."""
+    return {**settings.get(),
+            "choices": {"unknown_supplier_action": [
+                {"value": v, "label": UNKNOWN_SUPPLIER_LABELS[v]} for v in UNKNOWN_SUPPLIER_ACTIONS]}}
+
+
+@app.get("/api/settings")
+def get_settings(user: dict = Depends(current_user)):
+    """Readable by both roles: a reviewer needs to know why an invoice from an
+    unknown supplier was rejected rather than sent to procurement."""
+    return _settings_payload()
+
+
+@app.patch("/api/settings")
+def patch_settings(body: SettingsBody, user: dict = Depends(require_admin)):
+    """Procurement owns the supplier register, so it owns this switch too."""
+    try:
+        settings.update(body.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return _settings_payload()
 
 
 @app.get("/api/sources")
@@ -328,7 +365,8 @@ async def retry_run(run_id: str, as_invoice: bool = False, user: dict = Depends(
                 raise HTTPException(404, 'Invoice not found')
             try:
                 result = process_document(app.state.conn, row['bytes_path'], row['filename'],
-                                          DEFAULT_POLICY, DATA_DIR, retry_of=run_id, as_invoice=as_invoice)
+                                          settings.current_policy(), DATA_DIR,
+                                          retry_of=run_id, as_invoice=as_invoice)
             except ValueError as e:
                 raise HTTPException(409, str(e))
             except OperationalFailure as e:
@@ -454,7 +492,7 @@ def review_view(run_id: str):
     candidates = []
     for c in po_candidates(app.state.conn, fields):
         row = app.state.conn.execute("SELECT * FROM pos WHERE po_id=?", (c["po_id"],)).fetchone()
-        candidates.append({**c, **{k: v for k, v in budget_forecast(app.state.conn, row, gross_minor, inv_currency, DEFAULT_POLICY).items()
+        candidates.append({**c, **{k: v for k, v in budget_forecast(app.state.conn, row, gross_minor, inv_currency, settings.current_policy()).items()
                                    if k in ("remaining_minor", "status", "short_minor")}})
     po_rec = fields.get("po_reference")
     refs = extract_po_refs(po_rec.raw_value) if po_rec and po_rec.raw_value else []
@@ -464,7 +502,8 @@ def review_view(run_id: str):
     if len(refs) == 1:
         row = app.state.conn.execute("SELECT * FROM pos WHERE po_id=?", (refs[0],)).fetchone()
         if row is not None and vendor is not None and row["supplier_id"] == vendor["supplier_id"]:
-            budget = {**budget_forecast(app.state.conn, row, gross_minor, inv_currency, DEFAULT_POLICY), "gross_minor": gross_minor}
+            budget = {**budget_forecast(app.state.conn, row, gross_minor, inv_currency, settings.current_policy()),
+                      "gross_minor": gross_minor}
     return {
         "po_supplier_id": vendor["supplier_id"] if vendor else None,
         "revision_seq": seq,
@@ -510,7 +549,7 @@ def review_confirm_distinct(run_id: str, body: DistinctBody, user: dict = Depend
 @app.post("/api/runs/{run_id}/review/approve")
 def review_approve(run_id: str, body: DecideBody, user: dict = Depends(require_reviewer)):
     result = _review_guard(reevaluate)(
-        app.state.conn, run_id, user["actor"], body.idempotency_key, DEFAULT_POLICY)
+        app.state.conn, run_id, user["actor"], body.idempotency_key, settings.current_policy())
     if isinstance(result, CommitResult):
         return {"run_id": result.run_id, "invoice_id": result.invoice_id or None,
                 "route": result.decision.route.value,
@@ -832,7 +871,7 @@ async def run_sample(name: str, user: dict = Depends(require_reviewer)):
 
     def work():
         with app.state.work_lock:
-            return process_document(app.state.conn, str(path), name, DEFAULT_POLICY, DATA_DIR)
+            return process_document(app.state.conn, str(path), name, settings.current_policy(), DATA_DIR)
 
     try:
         result = await run_in_threadpool(work)

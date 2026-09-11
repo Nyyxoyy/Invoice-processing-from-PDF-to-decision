@@ -201,6 +201,10 @@ const TICKET_KINDS = {
   amend_po: "Amend a purchase order budget",
   other: "Other procurement request",
 };
+// A rejection caused only by the state of the supplier register — the supplier
+// is blocked, or absent from it — reopens once procurement changes that state.
+// Mirrors RECHECKABLE_REJECT_CODES in review.py; every other rejection is final.
+const RECHECKABLE_REJECT_CODES = ["VENDOR_BLOCKED", "VENDOR_UNKNOWN"];
 // One blocker code ↔ one request kind. A "slot" renders the request state
 // for that kind exactly where the blocker is shown, so the ask, the wait, the
 // answer and the retry all live in the same place as the problem.
@@ -488,13 +492,13 @@ function welcomePage() {
     <header class="welcome-intro"><span class="welcome-kicker">YOUR AI INVOICE WORKSPACE</span><h1>Start with an invoice.<br><span>Leave the busywork to AI.</span></h1><p>AI reads the details, checks the supplier and purchase order, and shows you what needs attention. Choose how you’d like to begin.</p></header>
     <section class="entry-choices" aria-label="Choose your invoice source">
       <article class="entry-card dataset-choice"><div class="entry-card-top"><span class="entry-icon" aria-hidden="true">▤</span><span class="entry-tag">A good place to start</span></div><h2>Upload from dataset</h2><p>Choose the complete invoice collection or select individual documents for processing.</p><div class="entry-meta"><span>Existing PDF library</span><span>No files needed</span></div><a class="button-link primary entry-cta" href="#dataset">Browse documents <span aria-hidden="true">→</span></a></article>
-      <article class="entry-card own-choice" id="drop-zone" aria-label="Drop your invoice PDFs here"><div class="entry-card-top"><span class="entry-icon" aria-hidden="true">↥</span><span class="entry-tag">Bring your own invoices</span></div><h2>Upload your own</h2><p>Choose an invoice from your computer, or drop files here. AI fills in the details and runs the same checks automatically.</p><div class="entry-meta"><span>PDF or ZIP of PDFs</span><span>Single invoice or batch</span></div><button class="entry-cta" data-action="upload">Choose your files <span aria-hidden="true">↑</span></button><small>PDFs up to 10 MB / 10 pages each · up to 25 per batch</small></article>
+      <article class="entry-card own-choice" id="drop-zone" aria-label="Drop your invoice PDFs here"><div class="entry-card-top"><span class="entry-icon" aria-hidden="true">↥</span><span class="entry-tag">Bring your own invoices</span></div><h2>Upload your own</h2><p>Choose an invoice from your computer, or drop files here. AI fills in the details and runs the same checks automatically.</p><div class="entry-meta"><span>PDF or ZIP of PDFs</span><span>Single invoice or batch</span></div><button class="entry-cta" data-action="upload">Choose your files <span aria-hidden="true">↑</span></button><button class="entry-cloud" data-action="cloud-import">Import from cloud</button><small>PDFs up to 10 MB / 10 pages each · up to 25 per batch</small></article>
     </section><div id="upload-error" role="alert"></div>
     <section class="welcome-process" aria-labelledby="next-heading"><div class="process-heading"><h2 id="next-heading">You upload. Here’s what happens next.</h2><span>One flow, whichever option you choose</span></div><ol><li><span class="step-number">01</span><div><h3>AI reads & fills</h3><p>Invoice details are extracted from the PDF. No form to fill out.</p></div></li><li><span class="step-number">02</span><div><h3>Matches & checks</h3><p>Supplier, PO and totals are checked. Missing records trigger a procurement request.</p></div></li><li><span class="step-number">03</span><div><h3>You see the result</h3><p>Get a confidence band and clear status. Eligible invoices are approved automatically.</p></div></li></ol></section>
     <footer class="welcome-footer"><span>Review exceptions. Follow every invoice in the dashboard.</span><span>Demo workspace · No payments are sent</span></footer></div>`;
 }
 async function datasetPage(generation) {
-  $('#main').innerHTML = `<div class="dataset-page"><div class="welcome-nav dataset-nav"><a class="welcome-brand" href="#home"><span class="brand-mark">i</span>Invoice desk</a></div><a class="back-link" href="#home">← Choose another way to start</a>${header('Select documents to process.', 'Upload the complete collection or choose individual PDFs below.')}<div id="dataset-content" aria-live="polite"><div class="skeleton" role="status">Loading documents…</div></div></div>`;
+  $('#main').innerHTML = `<div class="dataset-page"><div class="welcome-nav dataset-nav"><a class="welcome-brand" href="#home"><span class="brand-mark">i</span>Invoice desk</a></div><a class="back-link" href="#home">← Choose another way to start</a>${header('Select documents to process.', 'Upload the complete collection or choose individual PDFs below.')}<div id="dataset-content" aria-live="polite"><div class="skeleton" role="status">Loading documents…</div></div><section class="onboarding-upload" id="drop-zone" aria-label="Drop invoice PDFs or a ZIP archive"><div><h2>Upload your own documents</h2><p>Drop PDFs or a ZIP here, choose files from your computer, or import from cloud.</p><small>PDFs up to 10 MB / 10 pages each · up to 25 per batch</small></div><div class="upload-actions"><button class="primary" data-action="upload">Choose files</button><button data-action="cloud-import">Import from cloud</button></div></section><div id="upload-error" role="alert"></div></div>`;
   try {
     const [library, runs] = await Promise.all([api('/api/samples'), api('/api/runs').catch(() => [])]);
     if (generation !== state.generation) return;
@@ -525,11 +529,17 @@ async function route() {
     return;
   }
   let route = location.hash.slice(1) || (location.pathname === "/onboarding/dataset" ? "dataset" : location.pathname === "/app" ? (isAdmin() ? "queue" : "dashboard") : (isAdmin() ? "queue" : "home"));
+  const reviewDeepLink = route === "invoices?filter=review";
+  if (reviewDeepLink) {
+    route = "invoices";
+    state.filter = isAdmin() ? "attention" : "review";
+    state.search = "";
+  }
   if (onboardingComplete && ["home", "dataset"].includes(route)) route = "dashboard";
   const onboarding = ["home", "dataset"].includes(route);
   // Keep hash-based workspace navigation, but give onboarding its own URLs.
   // replaceState preserves live upload state while moving into the workspace.
-  const canonicalURL = onboarding ? (route === "dataset" ? "/onboarding/dataset" : "/onboarding") : `/app#${route}`;
+  const canonicalURL = onboarding ? (route === "dataset" ? "/onboarding/dataset" : "/onboarding") : `/app#${route}${reviewDeepLink ? "?filter=review" : ""}`;
   if (location.pathname + location.hash !== canonicalURL) history.replaceState(null, "", canonicalURL);
   document.body.classList.toggle("welcome-screen", onboarding);
   document.documentElement.classList.toggle("onboarding-shell", onboarding);
@@ -622,19 +632,27 @@ async function inbox(generation = state.generation) {
     ...needs.map((n) => n.run_id),
     ...runs.filter((r) => openDocs.has(r.document_id)).map((r) => r.run_id),
   ]);
+  if (state.route === "dashboard") {
+    $("#main").innerHTML = '<div id="upload-error"></div><div id="ai-dashboard" class="dashboard-page"></div>';
+    renderDashboard(currentRows());
+    return;
+  }
   $("#main").innerHTML =
     header(
-      "Invoice dashboard",
+      "Invoice review",
       isAdmin()
         ? "Look up an invoice and its decision. New work arrives in Requests."
         : "AI reads, matches and routes every invoice. Focus on the exceptions.",
+      // Reviewers get no header action here: the upload zone directly below
+      // already carries the primary one, and two upload buttons on one screen
+      // is a choice the reader has to resolve for no benefit.
       isAdmin()
         ? '<a class="button-link primary" href="#queue">Open requests →</a>'
-        : uploadButton(),
+        : "",
     ) +
     `
   ${!isAdmin() ? `<section class="upload-zone" id="drop-zone" aria-label="Drop invoice PDFs or a ZIP archive"><div class="upload-icon" aria-hidden="true">↥</div><div><h2>Upload once. AI takes it from here.</h2><p>Drop PDFs or a ZIP of PDFs · automatic extraction, checks and procurement requests · up to 10 MB and 10 pages each, 25 per batch</p></div><div class="upload-actions"><button class="primary" data-action="upload">Choose files</button><button data-action="cloud-import">Other ways to add</button></div></section><details class="sample-details" id="sample-details"><summary>Invoice collection</summary><div class="samples" id="samples">Loading samples…</div></details>` : ""}
-  <div id="upload-error"></div><div id="ai-dashboard"></div><section class="card"><div class="inbox-head"><div class="inbox-tools"><div class="filters" aria-label="Filter invoices"></div><input class="search" id="search" type="search" aria-label="Search invoices" placeholder="Search supplier or invoice…" value="${esc(state.search)}"></div></div><div id="invoice-table"></div></section><p class="footer-note">Your inbox keeps the latest result. Earlier reviews stay in the invoice’s activity.</p>`;
+  <div id="upload-error"></div><section class="card"><div class="inbox-head"><div class="inbox-tools"><div class="filters" aria-label="Filter invoices"></div><input class="search" id="search" type="search" aria-label="Search invoices" placeholder="Search supplier or invoice…" value="${esc(state.search)}"></div></div><div id="invoice-table"></div></section><p class="footer-note">Your inbox keeps the latest result. Earlier reviews stay in the invoice’s activity.</p>`;
   renderRows();
   loadSamples();
 }
@@ -649,22 +667,53 @@ function confidencePanel(c) {
 function renderDashboard(rows) {
   const el = $('#ai-dashboard');
   if (!el) return;
-  const auto = rows.filter(r => r.disposition === 'approved' && r.decision_mode !== 'reviewer').length;
-  const low = rows.filter(r => r.confidence?.band === 'low').length;
-  const waiting = rows.filter(r => workState(r).key === 'waiting').length;
-  el.innerHTML = `<section class="ai-metrics" aria-label="Invoice automation overview">
-    <article class="card"><span>Invoices uploaded</span><strong>${rows.length}</strong><small>Latest result per attempt lineage</small></article>
-    <article class="card"><span>Automatically approved</span><strong>${auto}</strong><small>No reviewer input required</small></article>
-    <article class="card"><span>Low confidence</span><strong>${low}</strong><small>Prioritized for a closer look</small></article>
-    <article class="card"><span>With procurement</span><strong>${waiting}</strong><small>Requests include extracted details</small></article>
-  </section><section class="card confidence-guide"><b>Confidence bands</b><span>${confidenceBadge({band:'high',score:90})}–100 · Verified matches</span><span>Medium · 70–89 · Match needs attention</span><span>Low · 0–69 · Check the reading</span><small>Evidence score, not a probability. Final status includes budget, duplicate and policy checks.</small></section>`;
+  const stages = [
+    ['approved', 'Approved', '#34866b'], ['review', 'Needs review', '#dc9a43'],
+    ['waiting', 'With procurement', '#7b76cc'], ['ready', 'Ready to recheck', '#459db2'],
+    ['rejected', 'Rejected', '#c97179'], ['processing', 'Processing', '#8794a7'],
+  ].map(([key, label, color]) => ({key, label, color, count: rows.filter(r => workState(r).key === key).length}));
+  const count = key => stages.find(s => s.key === key).count;
+  const automatic = rows.filter(r => r.disposition === 'approved' && r.decision_mode !== 'reviewer').length;
+  const attention = count('review') + count('ready');
+  const rate = rows.length ? Math.round(automatic / rows.length * 100) : 0;
+  const scored = rows.filter(r => Number.isFinite(r.confidence?.score));
+  const avg = scored.length ? Math.round(scored.reduce((n, r) => n + r.confidence.score, 0) / scored.length) : null;
+  $('#nav-count').textContent = isAdmin() ? '' : attention || '';
+  let offset = 0;
+  const segments = stages.map(s => { const start = offset; offset += rows.length ? s.count / rows.length * 100 : 0; return `${s.color} ${start}% ${offset}%`; });
+  // Use the original upload date for a lineage, even after a later review.
+  const byId = new Map(state.runs.map(r => [r.run_id, r]));
+  const uploadedAt = r => { const seen = new Set(); while (r.parent_run_id && byId.has(r.parent_run_id) && !seen.has(r.run_id)) { seen.add(r.run_id); r = byId.get(r.parent_run_id); } return new Date(r.created_at); };
+  const days = Array.from({length: 14}, (_, i) => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - 13 + i); return d; });
+  const daily = days.map(d => { const end = new Date(d); end.setDate(end.getDate() + 1); const items = rows.filter(r => { const at = uploadedAt(r); return at >= d && at < end; }); return {d, total: items.length, outcomes: stages.map(stage => ({...stage, count: items.filter(r => workState(r).key === stage.key).length}))}; });
+  const dailyDescription = day => `${day.d.toLocaleDateString()}: ${day.total} uploaded · ${day.outcomes.map(s => `${s.label}: ${s.count}`).join(' · ')}`;
+  const peak = Math.max(1, ...daily.map(d => d.total));
+  const periodTotal = daily.reduce((n,d) => n + d.total, 0);
+  const priorities = rows.filter(r => ['review','ready'].includes(workState(r).key)).sort((a,b) => Number(workState(b).key === 'ready') - Number(workState(a).key === 'ready') || (a.confidence?.score ?? 101) - (b.confidence?.score ?? 101)).slice(0,4);
+  const bands = [['high','High confidence','90–100','#34866b'],['medium','Medium confidence','70–89','#dc9a43'],['low','Low confidence','0–69','#c97179'],['unscored','Not scored','Awaiting evidence','#8794a7']];
+  el.innerHTML = `
+    <div class="dash-heading"><div><div class="eyebrow">INVOICE INTELLIGENCE</div><h1>Your invoice operations, at a glance.</h1><p>See what cleared, what’s moving, and where you can make a difference.</p></div><div class="dash-heading-actions"><span class="dash-live">Auto-refresh · 7s</span>${isAdmin() ? '<a class="button-link primary" href="#queue">Open requests →</a>' : ''}</div></div>
+    <section class="dash-brief"><div class="dash-brief-symbol" aria-hidden="true">✦</div><div><span class="dash-kicker">WORKSPACE SUMMARY</span><h2>${!rows.length ? 'Ready for your first invoice.' : attention ? `${attention} invoice${attention === 1 ? '' : 's'} could use your attention.` : 'Your review queue is clear.'}</h2><p>${rows.length ? `${automatic} automatically approved · ${count('waiting')} with procurement · ${count('processing')} processing. Review the priorities below to keep invoices moving.` : 'Upload invoices to see real outcomes, confidence scores, and activity here.'}</p></div><a href="#invoices?filter=review" class="button-link">Open invoice review ↗</a></section>
+    <div class="dash-section-label">WORKSPACE OVERVIEW <span>All time · latest result per invoice lineage</span></div>
+    <section class="dash-metrics" aria-label="Invoice overview">
+      ${[['Total invoices', rows.length, 'Across every workflow stage', '◫'],['Automatically approved', automatic, `${rate}% of all invoices`, '✓'],['Needs your attention', attention, `${count('ready')} ready to recheck`, '↗', '#invoices?filter=review'],['Average confidence', avg === null ? '—' : `${avg}<small>/100</small>`, `${scored.length} scored invoices · evidence based`, '✦']].map(([label,value,sub,icon,href]) => `<${href ? 'a' : 'article'} class="card dash-metric${href ? ' dash-metric-link' : ''}"${href ? ` href="${href}"` : ''}><div><span>${label}</span><i aria-hidden="true">${icon}</i></div><strong>${value}</strong><p>${sub}</p></${href ? 'a' : 'article'}>`).join('')}
+    </section>
+    <div class="dash-charts">
+      <section class="card dash-panel"><div class="dash-panel-head"><div><h2>Invoice activity</h2><p>Uploads by day, grouped by their current outcome</p></div><span class="dash-chip">Last 14 days</span></div><div class="dash-chart-summary"><strong>${periodTotal}</strong><span>invoices received</span></div><div class="dash-chart-key" aria-label="Invoice activity outcomes">${stages.map(s => `<span><i style="background:${s.color}"></i>${s.label}</span>`).join('')}</div>
+      <div class="dash-volume" role="img" aria-label="Daily invoice uploads over the last 14 days. ${esc(daily.map(dailyDescription).join('; '))}">${daily.map(d => `<div class="dash-day"><span class="dash-bar-value">${d.total || ''}</span><div class="dash-bar-track" title="${esc(dailyDescription(d))}"><div class="dash-bar" style="height:${d.total / peak * 100}%">${d.outcomes.filter(s => s.count).map(s => `<span style="height:${s.count / d.total * 100}%;background:${s.color}" title="${esc(s.label)}: ${s.count}"></span>`).join('')}</div></div><small>${d.d.getDate()}</small></div>`).join('')}</div><div class="dash-axis"><span>${days[0].toLocaleDateString(undefined,{month:'short',day:'numeric'})}</span><span>${periodTotal ? 'Daily upload count · local time' : 'No uploads in the last 14 days'}</span><span>Today</span></div></section>
+      <section class="card dash-panel"><div class="dash-panel-head"><div><h2>Where invoices stand</h2><p>Every invoice, accounted for</p></div></div><div class="dash-outcomes"><div class="dash-donut" role="img" aria-label="${esc(stages.map(s => `${s.label}: ${s.count}`).join(', '))}" style="background:${rows.length ? `conic-gradient(${segments.join(',')})` : 'var(--track)'}"><div><strong>${rows.length}</strong><span>invoices</span></div></div><div class="dash-legend">${stages.map(s => `<div><i style="background:${s.color}"></i><span>${s.label}</span><strong>${s.count}</strong></div>`).join('')}</div></div></section>
+    </div>
+    <div class="dash-bottom">
+      <section class="card dash-panel"><div class="dash-panel-head"><div><h2>Your next best actions</h2><p>Ready to recheck first, then lowest confidence</p></div><a href="#invoices">View invoices →</a></div><div class="dash-priorities">${priorities.length ? priorities.map(r => `<a class="dash-priority" href="#invoice/${encodeURIComponent(r.run_id)}"><span class="dash-file" aria-hidden="true">▤</span><div><strong>${esc(r.summary?.supplier_name || r.filename)}</strong><small>${esc(r.summary?.invoice_number || r.filename)} · ${esc(workState(r).label)}</small></div>${confidenceBadge(r.confidence)}<span aria-hidden="true">↗</span></a>`).join('') : '<div class="dash-clear"><span aria-hidden="true">✓</span><h3>No invoices need your review</h3><p>New exceptions and procurement replies will appear here.</p></div>'}</div></section>
+      <section class="card dash-panel"><div class="dash-panel-head"><div><h2>How strong is the evidence?</h2><p>Confidence across your invoice collection</p></div></div><div class="dash-confidence">${bands.map(([key,label,range,color]) => { const n = rows.filter(r => key === 'unscored' ? !Number.isFinite(r.confidence?.score) : r.confidence?.band === key).length; return `<div><div><span>${label} <small>${range}</small></span><strong>${n}</strong></div><div class="dash-confidence-track"><span style="width:${rows.length ? n / rows.length * 100 : 0}%;background:${color}"></span></div></div>`; }).join('')}</div><p class="dash-note">Evidence scores reflect extracted fields and supplier / PO checks. Approval also depends on budget, duplicate, and policy checks.</p></section>
+    </div>`;
 }
+
 function workState(r) {
   return InvoiceWorkflow.workState(r, state.allTickets || []);
 }
 function renderRows() {
   const rows = currentRows().sort((a, b) => Number(b.confidence?.band === "low" && b.disposition === "held") - Number(a.confidence?.band === "low" && a.disposition === "held"));
-  renderDashboard(rows);
   const count = (k) => rows.filter((r) => workState(r).key === k).length;
   $("#nav-count").textContent = isAdmin()
     ? ""
@@ -1029,7 +1078,7 @@ async function cloudImportModal() {
       action = `<form data-form="source-import" data-kind="link" class="link-form"><textarea name="urls" rows="3" placeholder="One link per line" aria-label="Links to PDF or ZIP files"></textarea><div class="button-row"><button class="small primary" type="submit">Import links</button></div><div class="action-error"></div></form>`;
     } else if (s.mode === "folder") {
       status = `${s.remote ? "Watching a shared Google Drive folder" : "Watching a folder on this machine"} · checked every ${s.poll_seconds}s · ${s.pending ? `<b>${s.pending} new</b>` : "nothing new"} · ${s.picked_up} picked up since start${s.reason ? ` · <span class="error-text">${esc(s.reason)}</span>` : ""}`;
-      action = `<form data-form="folder-settings" class="folder-form"><label class="folder-label">Folder to watch — a Google Drive folder link or a path on this machine<input name="dir" type="text" value="${esc(s.scope)}" spellcheck="false" placeholder="https://drive.google.com/drive/folders/… or /Users/you/Dropbox/Invoices"></label><div class="button-row"><button class="small primary" type="submit">Save folder</button>${s.is_default ? "" : `<button class="small" type="button" data-action="reset-folder" title="Back to ${esc(s.default_scope)}">Use default</button>`}<button class="small" type="button" data-action="browse-source" data-kind="folder">${s.pending ? "See waiting files" : "Refresh"}</button>${s.pending ? '<button class="small" type="button" data-action="import-folder-all">Import all now</button>' : ""}</div><div class="action-error"></div></form>`;
+      action = `<form data-form="folder-settings" class="folder-form"><label class="folder-label">Folder to watch — a Google Drive folder link or a path on this machine<input name="dir" type="text" value="${esc(s.scope)}" spellcheck="false" placeholder="https://drive.google.com/drive/folders/… or /Users/you/Dropbox/Invoices"></label><div class="button-row"><button class="small primary" type="submit">Save folder</button><button class="small" type="button" data-action="browse-source" data-kind="folder">${s.pending ? "See waiting files" : "Refresh"}</button>${s.pending ? '<button class="small" type="button" data-action="import-folder-all">Import all now</button>' : ""}</div><div class="action-error"></div></form>`;
     } else if (s.configured) {
       status = `Connected · ${esc(s.scope)}`;
       action = `<button class="small primary" data-action="browse-source" data-kind="${esc(s.kind)}">Browse</button>`;
@@ -1335,16 +1384,16 @@ async function detail(id, generation) {
   const docType = d.events
     .filter((e) => e.event_type === "document_type")
     .at(-1)?.payload;
-  const blockedOnly =
+  const supplierStateOnly =
     key === "rejected" &&
     decisionCodes.size > 0 &&
-    [...decisionCodes].every((c) => c === "VENDOR_BLOCKED");
+    [...decisionCodes].every((c) => RECHECKABLE_REJECT_CODES.includes(c));
   const canReview =
     key === "held" && !!rv && !child && !postedRelated && !isAdmin();
   const canProcure =
     key === "held" && !!rv && !child && !postedRelated && isAdmin();
   const canRecheckRejected =
-    blockedOnly && !!rv && !child && !postedRelated && !isAdmin();
+    supplierStateOnly && !!rv && !child && !postedRelated && !isAdmin();
   const title = noReading
     ? "We couldn’t finish reading this invoice"
     : key === "held"
@@ -1392,7 +1441,7 @@ async function detail(id, generation) {
           ? notInvoiceHelp(docType)
           : rejectionHelp(dec);
   $("#main").innerHTML =
-    `<a href="${isAdmin() ? "#queue" : "#invoices"}" class="back-link">← ${isAdmin() ? "Requests" : "Invoice reviews"}</a><div class="page-heading detail-title"><div><h1>${esc(s.supplier_name || d.filename)}</h1><p>${esc(s.invoice_number ? "Invoice #" + s.invoice_number + " · " : "")}${esc(d.filename)} · ${esc(date(d.created_at))}</p></div>${uploadButton("Upload another")}</div>${confidencePanel(d.confidence)}${tickets.some(t => t.status === "open" && t.requested_by === "invoice-ai") ? `<div class="success-message">AI has created a procurement request with the invoice details. No request form is needed. <a href="${isAdmin() ? "#queue" : "#requests"}">View request →</a></div>` : ""}${child ? `<div class="success-message">This invoice has a newer result. <a href="#invoice/${encodeURIComponent(latestDescendant(id))}">Open latest result →</a></div>` : ""}<section class="card outcome ${key}${rechecked && persistent.size ? " rechecked" : ""}"><div class="outcome-head">${badge(d)}${rechecked && persistent.size ? `<span class="badge still-open">${persistent.size} still unresolved</span>` : ""}<h2>${title}</h2></div><p>${esc(description)}</p>${Object.keys(fields).length ? `<dl class="invoice-summary"><div><dt>Invoice total</dt><dd>${esc(s.invoice_gross_total ? (rv?.display?.invoice_gross_total ? s.invoice_gross_total : `${curr} ${s.invoice_gross_total}`) : "Not confirmed")}</dd></div><div><dt>Invoice date</dt><dd>${esc(s.invoice_date || "Not confirmed")}</dd></div><div><dt>Purchase order</dt><dd>${esc(s.po_reference || "Not selected")}</dd></div><div><dt>Supplier</dt><dd>${esc(s.supplier_name || "Not confirmed")}</dd></div></dl>` : ""}${noReading && !isAdmin() ? `<div class="button-row" style="margin-top:16px">${!child ? '<button class="primary" data-action="retry-reading">Try reading again</button>' : ""}<button data-action="upload">Upload a replacement PDF</button></div><div id="retry-error"></div>` : ""}${notInvoice ? notInvoicePanel(docType, child) : key === "rejected" ? duplicateLink(d, dec) : ""}</section><div class="review-layout"><div class="review-panel">${canReview ? reviewHTML(rv) : canProcure || (isAdmin() && blockedOnly && !!rv && !child && !postedRelated) ? procurementHTML(rv) : canRecheckRejected ? blockedHTML(rv) : `${isAdmin() && !child && tickets.length ? terminalRequestsHTML() : ""}${summaryHTML(fields)}`}<div id="review-notice" role="status"></div></div><section class="card document-panel" aria-label="Invoice document"><div class="document-header"><h2>Original invoice</h2><button class="mobile-document-toggle small" data-action="toggle-preview" aria-expanded="false">Show document</button><div class="page-controls" id="page-controls"></div></div><div class="document-canvas" id="document-canvas"><p>Loading document…</p></div><div class="document-caption" id="document-caption">Compare these details with your invoice.</div></section></div>${detailsHTML(d, dec, rv)}<p class="footer-note">Approval records an amount against a purchase order. This demo does not send payments.</p>`;
+    `<a href="${isAdmin() ? "#queue" : "#invoices"}" class="back-link">← ${isAdmin() ? "Requests" : "Invoice reviews"}</a><div class="page-heading detail-title"><div><h1>${esc(s.supplier_name || d.filename)}</h1><p>${esc(s.invoice_number ? "Invoice #" + s.invoice_number + " · " : "")}${esc(d.filename)} · ${esc(date(d.created_at))}</p></div>${uploadButton("Upload another")}</div>${confidencePanel(d.confidence)}${tickets.some(t => t.status === "open" && t.requested_by === "invoice-ai") ? `<div class="success-message">AI has created a procurement request with the invoice details. No request form is needed. <a href="${isAdmin() ? "#queue" : "#requests"}">View request →</a></div>` : ""}${child ? `<div class="success-message">This invoice has a newer result. <a href="#invoice/${encodeURIComponent(latestDescendant(id))}">Open latest result →</a></div>` : ""}<section class="card outcome ${key}${rechecked && persistent.size ? " rechecked" : ""}"><div class="outcome-head">${badge(d)}${rechecked && persistent.size ? `<span class="badge still-open">${persistent.size} still unresolved</span>` : ""}<h2>${title}</h2></div><p>${esc(description)}</p>${Object.keys(fields).length ? `<dl class="invoice-summary"><div><dt>Invoice total</dt><dd>${esc(s.invoice_gross_total ? (rv?.display?.invoice_gross_total ? s.invoice_gross_total : `${curr} ${s.invoice_gross_total}`) : "Not confirmed")}</dd></div><div><dt>Invoice date</dt><dd>${esc(s.invoice_date || "Not confirmed")}</dd></div><div><dt>Purchase order</dt><dd>${esc(s.po_reference || "Not selected")}</dd></div><div><dt>Supplier</dt><dd>${esc(s.supplier_name || "Not confirmed")}</dd></div></dl>` : ""}${noReading && !isAdmin() ? `<div class="button-row" style="margin-top:16px">${!child ? '<button class="primary" data-action="retry-reading">Try reading again</button>' : ""}<button data-action="upload">Upload a replacement PDF</button></div><div id="retry-error"></div>` : ""}${notInvoice ? notInvoicePanel(docType, child) : key === "rejected" ? duplicateLink(d, dec) : ""}</section><div class="review-layout"><div class="review-panel">${canReview ? reviewHTML(rv) : canProcure || (isAdmin() && supplierStateOnly && !!rv && !child && !postedRelated) ? procurementHTML(rv) : canRecheckRejected ? supplierRejectHTML(rv, decisionCodes) : `${isAdmin() && !child && tickets.length ? terminalRequestsHTML() : ""}${summaryHTML(fields)}`}<div id="review-notice" role="status"></div></div><section class="card document-panel" aria-label="Invoice document"><div class="document-header"><h2>Original invoice</h2><button class="mobile-document-toggle small" data-action="toggle-preview" aria-expanded="false">Show document</button><div class="page-controls" id="page-controls"></div></div><div class="document-canvas" id="document-canvas"><p>Loading document…</p></div><div class="document-caption" id="document-caption">Compare these details with your invoice.</div></section></div>${detailsHTML(d, dec, rv)}<p class="footer-note">Approval records an amount against a purchase order. This demo does not send payments.</p>`;
   renderDocument(id, generation);
 }
 function latestDescendant(id) {
@@ -1439,6 +1488,8 @@ function rejectionHelp(dec) {
     return "This invoice number has already been approved for this supplier. No second amount was added.";
   if (codes.includes("VENDOR_BLOCKED"))
     return "This supplier is blocked, so the invoice was rejected automatically. If the supplier should be approved again, ask procurement below, then check again once they have.";
+  if (codes.includes("VENDOR_UNKNOWN"))
+    return "The supplier on this invoice is not in the supplier register, and this workspace rejects invoices from unknown suppliers. If the name was misread, correct it below and check again; if the supplier is genuinely new, ask procurement to onboard it. Procurement can also switch this to an onboarding request instead of a rejection, on the Suppliers page.";
   return (
     dec?.explanation ||
     "This invoice was not approved. No amount was added to the purchase order."
@@ -1861,17 +1912,41 @@ function reviewHTML(rv) {
 }
 // Rejected because the supplier is blocked: the one rejection a reviewer can
 // still act on, through procurement.
-function blockedHTML(rv) {
+// A rejection the supplier register can undo. Two causes, two ways back:
+// blocked (procurement approves it again) and unknown (the name is a misread
+// the reviewer can correct, or a genuinely new supplier procurement onboards).
+function supplierRejectHTML(rv, codes) {
   const supplier = raw("supplier_name");
-  return `<section class="card"><div class="section-heading"><h2>What you can do</h2><p>The supplier is blocked, so this invoice was rejected automatically. Only procurement can approve a supplier again.</p></div><div class="task">${askHTML(
-    "Supplier is blocked",
-    `${supplier || "This supplier"} is on the blocked list. If you believe it should be approved again, ask procurement. If not, the rejection stands.`,
-    "unblock_supplier",
-    {
-      followUp:
-        "Check the invoice again. With the supplier approved, the normal checks run and can approve it.",
-    },
-  )}${ticketNoticesHTML(new Set(["unblock_supplier"]))}</div><div class="review-footer"><p>Once procurement has approved the supplier again, check again.</p><button class="primary" data-action="check-again">Check again</button><div id="decision-error"></div></div></section>`;
+  const unknown = codes.has("VENDOR_UNKNOWN");
+  const kind = unknown ? "onboard_supplier" : "unblock_supplier";
+  const intro = unknown
+    ? "This supplier is not in the supplier register, and this workspace rejects invoices from unknown suppliers. Nothing was approved."
+    : "The supplier is blocked, so this invoice was rejected automatically. Only procurement can approve a supplier again.";
+  const problem = rv.diagnosis?.field_problems?.supplier_name;
+  const correction = unknown && problem ? mapSupplierHTML(rv, problem) : "";
+  const ask = unknown
+    ? askHTML(
+        "Genuinely new supplier?",
+        `${supplier || "This supplier"} is not in the register. If the name above is a misread of an approved supplier, correct it and check again. If the supplier is genuinely new, procurement approves it and raises its purchase order — one request covers both.`,
+        kind,
+        {
+          followUp:
+            "Check the invoice again. With the supplier in the register, the normal checks run and can approve it.",
+        },
+      )
+    : askHTML(
+        "Supplier is blocked",
+        `${supplier || "This supplier"} is on the blocked list. If you believe it should be approved again, ask procurement. If not, the rejection stands.`,
+        kind,
+        {
+          followUp:
+            "Check the invoice again. With the supplier approved, the normal checks run and can approve it.",
+        },
+      );
+  const footer = unknown
+    ? "Once the supplier name is corrected, or procurement has onboarded the supplier, check again."
+    : "Once procurement has approved the supplier again, check again.";
+  return `<section class="card"><div class="section-heading"><h2>What you can do</h2><p>${esc(intro)}</p></div><div class="task">${correction}${ask}${ticketNoticesHTML(new Set([kind]))}</div><div class="review-footer"><p>${esc(footer)}</p><button class="primary" data-action="check-again">Check again</button><div id="decision-error"></div></div></section>`;
 }
 // Admin mirror of the slot: the reviewer's open request for this kind, with
 // the resolve/decline form, inline in the task that answers it.
@@ -2161,15 +2236,75 @@ function focusRecord(id) {
   el.classList.add("highlight");
   setTimeout(() => el.classList.remove("highlight"), 2400);
 }
+// What happens to an invoice whose supplier is not in the register. Procurement
+// owns the register, so procurement owns this rule; a reviewer sees it read-only
+// because it explains why their invoice was rejected rather than queued.
+function unknownSupplierRuleHTML(workspace) {
+  if (!workspace) return "";
+  const current = workspace.unknown_supplier_action;
+  const choices = workspace.choices?.unknown_supplier_action ?? [];
+  // Same rule, two audiences: procurement is choosing it, a reviewer is being
+  // told what it means for the invoice in front of them.
+  const detail = {
+    reject: "The invoice is rejected immediately. Nothing is posted and no request is raised. A reviewer can still correct a misread name, or ask you to onboard the supplier, and check the invoice again.",
+    ticket: "The invoice is held and Invoice AI opens an onboarding request for you, with the supplier name and the invoice details already filled in.",
+  };
+  const reviewerDetail = {
+    reject: "Invoices naming a supplier that is not in the register are rejected automatically. Nothing is posted. If the name was misread, correct it on the invoice and check again; if the supplier is genuinely new, ask procurement to onboard it from the invoice, then check again.",
+    ticket: "Invoices naming a supplier that is not in the register are held, and Invoice AI raises the onboarding request with procurement for you — no request form to fill in.",
+  };
+  if (!isAdmin())
+    return `<section class="card settings-card"><div class="section-heading"><h2>Invoices from unknown suppliers</h2><p>${esc(reviewerDetail[current] || "")}</p></div><p class="footer-note" style="margin:0">Set by procurement (administrator role). A supplier name that could not be read is always held for you, never rejected.</p></section>`;
+  return `<section class="card settings-card"><div class="section-heading"><h2>Invoices from unknown suppliers</h2><p>When an invoice names a supplier that is not in the register below, Invoice AI can reject it outright or hand it to you as an onboarding request.</p></div><div class="setting-options" role="radiogroup" aria-label="Invoices from unknown suppliers">${choices
+    .map(
+      (c) =>
+        `<label class="setting-option${c.value === current ? " selected" : ""}"><input type="radio" name="unknown_supplier_action" value="${esc(c.value)}" data-setting="unknown_supplier_action" ${c.value === current ? "checked" : ""}><span class="setting-option-body"><b>${esc(c.label)}</b><small>${esc(detail[c.value] || "")}</small></span></label>`,
+    )
+    .join("")}</div><p class="footer-note" style="margin:0">Applies to invoices processed from now on; decisions already taken are not revisited. A supplier name that could not be read is always held for a reviewer, never rejected — an unreadable name is uncertainty, not evidence that a supplier is absent.</p><div id="setting-error"></div></section>`;
+}
+// Instant apply: a rule with a Save button invites a half-set state, and the
+// server is the only place the choice actually lives. On failure the radio is
+// put back where it was, so what is shown never outruns what is stored.
+async function saveSetting(name, value) {
+  const previous = state.settings?.[name];
+  const box = $("#setting-error");
+  if (box) box.innerHTML = "";
+  document.querySelectorAll(`[data-setting="${name}"]`).forEach((input) => {
+    input.disabled = true;
+    input.closest(".setting-option")?.classList.toggle("selected", input.value === value);
+  });
+  try {
+    state.settings = await api("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [name]: value }),
+    });
+    notice(value === "reject"
+      ? "Invoices from unknown suppliers are now rejected automatically."
+      : "Invoices from unknown suppliers are now held, with an onboarding request for you.");
+  } catch (err) {
+    document.querySelectorAll(`[data-setting="${name}"]`).forEach((input) => {
+      input.checked = input.value === previous;
+      input.closest(".setting-option")?.classList.toggle("selected", input.value === previous);
+    });
+    if (box) box.innerHTML = `<p class="error-text">${esc(err.message || "The setting could not be saved.")}</p>`;
+  } finally {
+    document.querySelectorAll(`[data-setting="${name}"]`).forEach((i) => (i.disabled = false));
+  }
+}
 async function master(kind, generation) {
-  const [pos, vendors] = await Promise.all([
+  const isPO = kind === "pos";
+  const [pos, vendors, workspace] = await Promise.all([
     api("/api/pos"),
     api("/api/vendors"),
+    // The unknown-supplier rule belongs with the register it depends on, so it
+    // is only fetched (and shown) on the Suppliers page.
+    isPO ? Promise.resolve(null) : api("/api/settings").catch(() => null),
   ]);
   if (generation !== state.generation) return;
   state.pos = pos;
   state.vendors = vendors;
-  const isPO = kind === "pos";
+  state.settings = workspace ?? state.settings;
   $("#main").innerHTML =
     header(
       isPO ? "Purchase orders" : "Suppliers",
@@ -2201,7 +2336,7 @@ async function master(kind, generation) {
           .join(
             "",
           )}</tbody></table></div>${!pos.length ? '<div class="empty"><p>No purchase orders yet. Add an authorized order to get started.</p></div>' : ""}</section><p class="footer-note">Held and rejected invoices use no budget. ${isAdmin() ? "Amending an order can never lower it below the billing already approved against it." : "Only procurement (administrator role) can raise, amend or close purchase orders."}</p>`
-      : `<div class="supplier-grid">${vendors
+      : unknownSupplierRuleHTML(workspace) + `<div class="supplier-grid">${vendors
           .map((v) => {
             const referenced = (v.total_pos || 0) + (v.invoices || 0) > 0;
             return `<section class="card supplier-card" id="vendor-${esc(v.supplier_id)}"><h2 style="font-size:15px">${esc(v.name)}</h2><p>${esc(v.country || "Country not specified")}</p><div class="linked-row">${(() => { const n = pos.filter((p) => p.supplier_id === v.supplier_id).length; return n ? `<button type="button" class="text small linked" data-action="show-vendor-pos" data-id="${esc(v.supplier_id)}">Purchase orders (${n})</button>` : '<small class="muted-line">No purchase orders yet</small>'; })()}${v.invoices ? `<a class="linked" href="#invoices/${encodeURIComponent(v.name)}">Invoices (${v.invoices}) →</a>` : ""}</div><span class="badge ${v.status === "approved" ? "approved" : "blocked"}">${esc(v.status === "approved" ? "Approved supplier" : "Blocked")}</span><p class="meta">${referenced ? `${v.invoices || 0} invoice${v.invoices === 1 ? "" : "s"} · ${v.total_pos || 0} purchase order${v.total_pos === 1 ? "" : "s"} on record` : "No invoices or purchase orders yet"}</p>${v.aliases?.length ? `<p class="meta">Also known as: ${esc(v.aliases.join(", "))}</p>` : ""}${isAdmin() ? `<details class="manage-actions"><summary>Manage supplier</summary><div class="supplier-actions"><button class="small" data-action="edit-vendor" data-id="${esc(v.supplier_id)}" aria-expanded="false">Edit</button>${v.status === "approved" ? `<button class="small" data-action="block-vendor" data-id="${esc(v.supplier_id)}">Block</button>` : `<button class="small" data-action="unblock-vendor" data-id="${esc(v.supplier_id)}">Approve again</button>`}<button class="small danger" data-action="delete-vendor" data-id="${esc(v.supplier_id)}" ${referenced ? 'title="Suppliers with invoices or purchase orders cannot be deleted — block them instead"' : ""}>Delete</button></div><form class="edit-vendor" data-form="edit-vendor" data-id="${esc(v.supplier_id)}" hidden><label>Supplier legal name<input name="name" value="${esc(v.name)}" required></label><label>Country<input name="country" value="${esc(v.country || "")}" placeholder="US"></label><label>Other names (subsidiaries, brands — comma-separated)<input name="aliases" value="${esc((v.aliases || []).join(", "))}" placeholder="White Group, WG Trading"></label><div class="button-row"><button class="primary small">Save changes</button><button type="button" class="small" data-action="edit-vendor" data-id="${esc(v.supplier_id)}">Cancel</button></div><small>Renaming keeps the old name recognised, so invoices that still print it will match.</small></form></details>` : ""}</section>`;
@@ -3117,6 +3252,7 @@ document.addEventListener("submit", (e) => {
 });
 document.addEventListener("change", (e) => {
   const sel = e.target;
+  if (sel.dataset?.setting) { saveSetting(sel.dataset.setting, sel.value); return; }
   if (sel.matches('[data-form="sample-batch"] input[name=names]')) { updateSampleSelection(sel.closest("form")); return; }
   if (sel instanceof HTMLSelectElement && sel.hasAttribute("data-request-kind")) {
     sel.closest("form").querySelectorAll("[data-when]").forEach((el) => {
@@ -3292,14 +3428,15 @@ setInterval(async () => {
       api("/api/runs"),
       api("/api/tickets?status=all"),
     ]);
-    if (["invoices", "dashboard"].includes(state.route) && $("#invoice-table")) {
+    if (["invoices", "dashboard"].includes(state.route) && ($("#invoice-table") || $("#ai-dashboard"))) {
       if (
         JSON.stringify(state.runs) !== JSON.stringify(runs) ||
         JSON.stringify(state.allTickets) !== JSON.stringify(tickets)
       ) {
         state.runs = runs;
         state.allTickets = tickets;
-        renderRows();
+        if (state.route === "dashboard") renderDashboard(currentRows());
+        else renderRows();
       }
       const warning = $("#upload-error");
       if (warning?.textContent.includes("inbox could not refresh"))

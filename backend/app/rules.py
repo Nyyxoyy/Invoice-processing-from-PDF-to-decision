@@ -137,6 +137,15 @@ def resolve(inp: ResolverInput, policy: Policy) -> Decision:
     if inp.vendor_resolved and inp.vendor_blocked:
         return Decision(Route.REJECT, (Code.VENDOR_BLOCKED,), inp.budget)
 
+    # A supplier that is absent from the register cannot be paid. Under the
+    # default policy that is terminal for the submission; under "ticket" it
+    # falls through to the HOLD list below and procurement is asked to onboard.
+    # Note the tri-state: only vendor_resolved is False — a name that WAS read
+    # and did not match — reaches this. None means the name could not be read,
+    # which is uncertainty, not evidence of absence, and always holds.
+    if inp.vendor_resolved is False and policy.unknown_vendor_action == "reject":
+        return Decision(Route.REJECT, (Code.VENDOR_UNKNOWN,), inp.budget)
+
     # Everything below is HOLD territory: uncertainty or certain-but-fixable.
     holds: list[Code] = []
     if inp.content_conflict:
@@ -235,6 +244,12 @@ def explain(decision: Decision) -> str:
     if Code.UNSUPPORTED_DOCUMENT_TYPE in decision.codes:
         return ("Rejected (UNSUPPORTED_DOCUMENT_TYPE). The document is not an invoice, so nothing was "
                 "read or approved. Next: upload the invoice itself, or read this file as an invoice anyway.")
+    if Code.VENDOR_UNKNOWN in decision.codes:
+        return ("Rejected (VENDOR_UNKNOWN). The supplier named on the invoice is not in the supplier "
+                "register, and this workspace rejects invoices from unknown suppliers. No amount was "
+                "added to the approved ledger. Next: if this is a misread of an approved supplier, "
+                "correct the supplier name and check again; if the supplier is genuinely new, ask "
+                "procurement to onboard it, then check again.")
     return (
         f"Rejected ({primary})."
         + budget_line

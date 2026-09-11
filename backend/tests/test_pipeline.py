@@ -1,5 +1,7 @@
 """Pipeline-level fixtures with the model stubbed — no API calls.
 Financial-effect tests run against the real commit path."""
+from dataclasses import replace
+
 import fitz
 import pytest
 
@@ -8,8 +10,13 @@ from app.db import connect
 from app.extractor import Selection
 from app.ledger import consumed_minor
 from app.main import seed_if_empty
-from app.policy import DEFAULT_POLICY
+from app.policy import DEFAULT_POLICY, Policy
 from app.rules import Code, Route
+
+# The workspace switch for suppliers that are not in the register. The product
+# default rejects them; "ticket" holds the invoice and asks procurement to
+# onboard. Tests that exercise the hold-and-review flow run under TICKET_POLICY.
+TICKET_POLICY = replace(DEFAULT_POLICY, unknown_vendor_action="ticket")
 
 
 def make_pdf(path, total="$6,495.00", subtotal="$6,000.00", tax="$495.00",
@@ -77,11 +84,11 @@ def env(tmp_path, monkeypatch):
     conn.close()
 
 
-def run_pdf(env, name, **kw):
+def run_pdf(env, name, policy=DEFAULT_POLICY, **kw):
     conn, data_dir = env
     path = f"{data_dir}/{name}.pdf"
     make_pdf(path, **kw)
-    return pipeline.process_document(conn, path, f"{name}.pdf", DEFAULT_POLICY, data_dir)
+    return pipeline.process_document(conn, path, f"{name}.pdf", policy, data_dir)
 
 
 def test_clean_invoice_approves_and_posts_once(env):
@@ -119,8 +126,10 @@ def test_math_mismatch_holds(env):
 
 
 def test_unknown_vendor_holds_without_identity(env):
+    """Under the "ticket" setting an absent supplier is a hold, not a verdict:
+    no business-key identity is established and nothing is posted."""
     conn, _ = env
-    r = run_pdf(env, "unknown", supplier="Mystery Corp Ltd", invoice_no="MY-1")
+    r = run_pdf(env, "unknown", policy=TICKET_POLICY, supplier="Mystery Corp Ltd", invoice_no="MY-1")
     assert r.decision.route == Route.HOLD_REVIEW
     assert Code.VENDOR_UNKNOWN in r.decision.codes
     assert r.invoice_id == ""

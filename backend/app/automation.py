@@ -52,6 +52,10 @@ def finish_automation(conn, result):
     from .ledger import _emit
     confidence = confidence_for_run(conn, result.run_id)
     _emit(conn, result.run_id, 'DECIDE', 'confidence_assessed', confidence)
+    # Only a held invoice is waiting on procurement. This is also what makes the
+    # "Unknown suppliers" switch work end to end: under `reject` an absent
+    # supplier ends the run as REJECT, so no onboarding request is raised; under
+    # `ticket` it holds and falls through to the handoff below.
     if result.decision.route.value != 'HOLD_REVIEW':
         return result
     try:

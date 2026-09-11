@@ -119,6 +119,18 @@ def resolve_vendor(conn, supplier_name: str | None) -> sqlite3.Row | None:
     return None
 
 
+def _vendor_absent(supplier_rec, supplier_name: str | None) -> bool | None:
+    """`ResolverInput.vendor_resolved` for a supplier that did not resolve.
+
+    False states a fact — this name is not in the register — and is the only
+    input the resolver will reject on. None says we never established a name to
+    look up, so the invoice can only be held for a human. `automation.py` draws
+    the same line before raising an onboarding request."""
+    if supplier_name and supplier_rec is not None and supplier_rec.affirmatively_verified():
+        return False
+    return None
+
+
 def _finalize_not_invoice(conn, run_id: str, verdict, policy: Policy) -> CommitResult:
     """The document is not an invoice: record what was found and why, then a
     terminal REJECT (UNSUPPORTED_DOCUMENT_TYPE). No field revision is saved,
@@ -303,9 +315,14 @@ def _process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
 
     # ---- vendor + identity preconditions ----
     supplier = fields.get("supplier_name")
-    vendor = resolve_vendor(conn, extract_name(supplier.raw_value) if supplier else None)
+    supplier_name = extract_name(supplier.raw_value) if supplier else None
+    vendor = resolve_vendor(conn, supplier_name)
     if vendor is None:
-        gates.vendor_resolved = False
+        # Tri-state, and the distinction decides whether an unknown supplier may
+        # be rejected outright: False = a name was read AND verified and no
+        # supplier matches it; None = nothing reliable was read, which is
+        # uncertainty, not evidence of absence, so it can only hold.
+        gates.vendor_resolved = _vendor_absent(supplier, supplier_name)
         return _finalize_no_identity(conn, run_id, gates, policy)
     gates.vendor_resolved = True
     gates.vendor_blocked = vendor["status"] == "blocked"

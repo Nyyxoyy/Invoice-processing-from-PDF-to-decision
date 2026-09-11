@@ -11,7 +11,8 @@
         "--port",
         "8321",
         "--app-dir",
-        "/Users/nikunj/zamp-case-study/backend"
+        "/Users/nikunj/zamp-case-study/backend",
+        "--reload"
       ],
       "port": 8321
     },

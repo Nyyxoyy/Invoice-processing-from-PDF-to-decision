@@ -9,8 +9,12 @@ COPY backend/requirements.txt /srv/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend /srv/backend
-# fixtures power the "sample invoices" buttons; small, ship them
+# fixtures power the "sample invoices" buttons; small, ship them.
+# reviewer-demo.json is the onboarding collection's catalogue — without it
+# /api/samples returns nothing and the "Upload from dataset" page has no
+# documents to offer, so it ships alongside the PDFs it describes.
 COPY fixtures/pdfs /srv/fixtures/pdfs
+COPY fixtures/reviewer-demo.json /srv/fixtures/reviewer-demo.json
 
 # the SQLite database and uploaded PDFs live here — mount a persistent volume on /data
 VOLUME ["/data"]

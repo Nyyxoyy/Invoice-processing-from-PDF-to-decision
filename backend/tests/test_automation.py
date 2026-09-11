@@ -1,6 +1,6 @@
 """Real pipeline, model fixture: confidence routing and unattended handoff."""
 import json
-from test_pipeline import env, run_pdf
+from test_pipeline import TICKET_POLICY, env, run_pdf
 from app.automation import saved_confidence, finish_automation
 
 
@@ -15,7 +15,7 @@ def test_clean_high_confidence_no_ticket(env):
 
 def test_unknown_supplier_and_po_one_combined_request(env):
     conn, _ = env
-    result = run_pdf(env, 'auto-new', supplier='New Supplier LLC', po='PO-9876')
+    result = run_pdf(env, 'auto-new', policy=TICKET_POLICY, supplier='New Supplier LLC', po='PO-9876')
     t = conn.execute('SELECT * FROM tickets').fetchone()
     assert t['kind'] == 'onboard_supplier' and t['requested_by'] == 'invoice-ai'
     assert 'PO-9876' in t['note'] and 'New Supplier LLC' in t['note']
@@ -57,9 +57,8 @@ def test_bad_totals_never_high_confidence(env):
 
 def test_duplicate_does_not_open_another_ticket(env):
     conn, _ = env
-    first = run_pdf(env, 'auto-dupe', supplier='New Supplier LLC')
+    first = run_pdf(env, 'auto-dupe', policy=TICKET_POLICY, supplier='New Supplier LLC')
     from app.pipeline import process_document
-    from app.policy import DEFAULT_POLICY
     path = conn.execute('SELECT bytes_path FROM documents JOIN runs USING(document_id) WHERE run_id=?', (first.run_id,)).fetchone()[0]
-    process_document(conn, path, 'duplicate.pdf', DEFAULT_POLICY, env[1])
+    process_document(conn, path, 'duplicate.pdf', TICKET_POLICY, env[1])
     assert conn.execute('SELECT count(*) FROM tickets').fetchone()[0] == 1

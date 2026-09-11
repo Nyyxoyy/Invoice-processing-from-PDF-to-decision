@@ -755,12 +755,19 @@ def load_latest(conn, run_id: str) -> tuple[int, dict[str, FieldRecord], dict]:
     return row["seq"], fields, json.loads(row["context_json"])
 
 
-def _rejected_only_for_blocked_supplier(conn, run_id: str) -> bool:
-    """A rejection whose only cause is a blocked supplier can legitimately be
-    re-checked after procurement approves the supplier again."""
+# Rejections caused only by the state of the supplier register: procurement can
+# change that state (approve the supplier again, or onboard it), after which the
+# same invoice deserves a fresh decision. Every other rejection is final.
+RECHECKABLE_REJECT_CODES = {"VENDOR_BLOCKED", "VENDOR_UNKNOWN"}
+
+
+def _rejected_only_for_supplier_state(conn, run_id: str) -> bool:
+    """A rejection whose only cause is the supplier being blocked, or absent
+    from the register, can legitimately be re-checked once procurement has
+    approved or onboarded that supplier."""
     dec = _latest_event(conn, run_id, "decision") or {}
     codes = set(dec.get("codes") or [])
-    return bool(codes) and codes <= {"VENDOR_BLOCKED"}
+    return bool(codes) and codes <= RECHECKABLE_REJECT_CODES
 
 
 def _reviewable_run(conn, run_id: str) -> sqlite3.Row:
@@ -769,7 +776,7 @@ def _reviewable_run(conn, run_id: str) -> sqlite3.Row:
         raise ReviewError(404, "no such run")
     if run["disposition"] == "held":
         return run
-    if run["disposition"] == "rejected" and _rejected_only_for_blocked_supplier(conn, run_id):
+    if run["disposition"] == "rejected" and _rejected_only_for_supplier_state(conn, run_id):
         return run
     raise ReviewError(409, f"run is not held (disposition={run['disposition']}) — only held runs are reviewable")
 
@@ -1094,7 +1101,7 @@ def resolve_ticket(conn, ticket_id: str, outcome: str, note: str, resolved_by: s
     latest = conn.execute("SELECT disposition FROM runs WHERE run_id=?",
                           (latest_run_in_lineage(conn, row["run_id"]),)).fetchone() if row["run_id"] else None
     invoice_final = latest is not None and latest["disposition"] in ("approved", "rejected") \
-        and not (latest["disposition"] == "rejected" and _rejected_only_for_blocked_supplier(conn, latest_run_in_lineage(conn, row["run_id"])))
+        and not (latest["disposition"] == "rejected" and _rejected_only_for_supplier_state(conn, latest_run_in_lineage(conn, row["run_id"])))
     if invoice_final:
         fulfilled = outcome == "resolved"   # nothing derivable matters any more; the admin's word closes it
     if outcome == "declined" and fulfilled:
@@ -1264,11 +1271,14 @@ def reevaluate(conn, run_id: str, actor: str, idempotency_key: str,
 
     gates = assess(fields, context.get("any_scanned", False), currency)
 
-    from .pipeline import resolve_vendor
+    from .pipeline import resolve_vendor, _vendor_absent
     supplier = fields.get("supplier_name")
-    vendor = resolve_vendor(conn, extract_name(supplier.raw_value) if supplier and supplier.raw_value else None)
+    supplier_name = extract_name(supplier.raw_value) if supplier and supplier.raw_value else None
+    vendor = resolve_vendor(conn, supplier_name)
     if vendor is None:
-        gates.vendor_resolved = False
+        # same tri-state as the first reading: only a verified name that does
+        # not match the register may be rejected outright
+        gates.vendor_resolved = _vendor_absent(supplier, supplier_name)
         return _finalize_review_run(conn, review_run, gates, policy)
     gates.vendor_resolved = True
     gates.vendor_blocked = vendor["status"] == "blocked"
@@ -1313,8 +1323,9 @@ def reevaluate(conn, run_id: str, actor: str, idempotency_key: str,
     codes = {c.value for c in out.decision.codes}
     if route in ("AUTO_APPROVE", "APPROVE_WITH_EXCEPTION"):
         close_requests_for_final_invoice(conn, review_run, actor, "approved")
-    elif route == "REJECT" and codes != {"VENDOR_BLOCKED"}:
-        # a blocked-supplier rejection stays reviewable; its unblock request must survive
+    elif route == "REJECT" and not codes <= RECHECKABLE_REJECT_CODES:
+        # a blocked/unknown-supplier rejection stays reviewable; the onboarding
+        # or unblock request it depends on must survive
         close_requests_for_final_invoice(conn, review_run, actor, "rejected")
     return out
 
