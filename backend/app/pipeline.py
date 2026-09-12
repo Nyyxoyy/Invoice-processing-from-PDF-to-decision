@@ -6,6 +6,8 @@ import hashlib
 import json
 import sqlite3
 import uuid
+from contextlib import nullcontext
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import ledger
@@ -147,13 +149,60 @@ def _is_rejected_as_not_invoice(conn, run_id: str) -> bool:
     return codes == [Code.UNSUPPORTED_DOCUMENT_TYPE.value]
 
 
-def _process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
-                     policy: Policy, data_dir: str, retry_of: str | None = None,
-                     as_invoice: bool = False) -> CommitResult:
+# ---------------------------------------------------------------------------
+# Three phases. INGEST and DECIDE touch the database and always run under the
+# worker lock. READ — the slow part, where the model is called — touches only
+# files and buffers its events. Several documents can therefore be read at
+# once (intake.BatchRegistry, EXTRACT_CONCURRENCY) while every duplicate check
+# and every ledger write stays strictly serialized, exactly as before.
+# Parallelism changes how long a batch takes, not what it costs: the model is
+# billed per token, and the per-invoice CallBudget is unchanged.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Ingest:
+    """One accepted document with its run row created. `result` is set when the
+    ingest itself already decided the run — an identical file was submitted
+    before — so there is nothing to read and the model is never called."""
+    run_id: str
+    document_id: str
+    stored: Path
+    filename: str
+    retry_of: str | None = None
+    as_invoice: bool = False
+    result: CommitResult | None = None
+
+
+@dataclass
+class Reading:
+    """Everything reading one document produced, with no database involved.
+    Events are buffered in order and written by `decide_document`, so the audit
+    trail reads exactly as it did when the phases were one function. Failures
+    are returned, not raised: the caller records them on the run under the lock."""
+    events: list = field(default_factory=list)
+    failure: tuple[str, str] | None = None   # (reason recorded on the run, reason shown to the reviewer)
+    not_invoice: object | None = None        # type-gate verdict: terminal reject, nothing to review
+    rev: object | None = None
+    any_scanned: bool = False
+    fields: dict = field(default_factory=dict)
+    page_text: str | None = None
+    budget_exhausted: bool = False
+
+    def emit(self, stage: str, event_type: str, payload: dict) -> None:
+        self.events.append((stage, event_type, payload))
+
+    def fail(self, recorded: str, shown: str) -> "Reading":
+        self.failure = (recorded, shown)
+        return self
+
+
+def ingest_document(conn: sqlite3.Connection, pdf_path: str, filename: str, data_dir: str,
+                    policy: Policy, retry_of: str | None = None, as_invoice: bool = False) -> Ingest:
+    """INGEST (under the worker lock): document identity, the L1 duplicate
+    check, retry validation, the stored copy and the run row. No model call."""
     raw = Path(pdf_path).read_bytes()
     sha = hashlib.sha256(raw).hexdigest()
 
-    # ---- INGEST: document identity + L1 ----
     existing_doc = conn.execute("SELECT document_id FROM documents WHERE sha256=?", (sha,)).fetchone()
     run_id = _uid("run")
     if retry_of:
@@ -178,8 +227,8 @@ def _process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
             "ORDER BY created_at LIMIT 1", (document_id,)).fetchone()
         _emit(conn, run_id, "INGEST", "duplicate_submission",
               {"sha256": sha, "original_invoice_id": prior["invoice_id"] if prior else None})
-        gates = ResolverInput(identical_document=True)
-        return _finalize_no_identity(conn, run_id, gates, policy)
+        result = _finalize_no_identity(conn, run_id, ResolverInput(identical_document=True), policy)
+        return Ingest(run_id, document_id, Path(pdf_path), filename, retry_of, as_invoice, result=result)
 
     if retry_of:
         document_id = existing_doc['document_id']
@@ -193,39 +242,46 @@ def _process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
                      (document_id, sha, filename, str(stored)))
     conn.execute("INSERT INTO runs (run_id, document_id, run_status, parent_run_id) VALUES (?, ?, 'running', ?)",
                  (run_id, document_id, retry_of))
+    return Ingest(run_id, document_id, stored, filename, retry_of, as_invoice)
 
-    if _needs_password(str(stored)):
-        _fail_run(conn, run_id, "encrypted: password required")
-        raise OperationalFailure(run_id, "the PDF is password-protected")
+
+def read_document(ingest: Ingest, data_dir: str) -> Reading:
+    """READ (no lock, no database): evidence, the document-type gate, the model
+    calls and their verification against the page. Safe to run for several
+    documents at once."""
+    reading = Reading()
+    stored = str(ingest.stored)
+
+    if _needs_password(stored):
+        return reading.fail("encrypted: password required", "the PDF is password-protected")
     try:
-        rev = prepare_evidence(str(stored))
+        rev = prepare_evidence(stored)
     except Exception as e:  # corrupt/unparseable PDF: explicit failed run
-        _fail_run(conn, run_id, f"parse_error: {type(e).__name__}")
-        raise OperationalFailure(run_id, f"unreadable PDF ({type(e).__name__})") from e
+        return reading.fail(f"parse_error: {type(e).__name__}", f"unreadable PDF ({type(e).__name__})")
     if rev.pages == 0:
-        _fail_run(conn, run_id, "no_pages: the PDF has no pages")
-        raise OperationalFailure(run_id, "the PDF has no pages")
+        return reading.fail("no_pages: the PDF has no pages", "the PDF has no pages")
     if rev.pages > MAX_PAGES:
-        _fail_run(conn, run_id, f"page_limit: {rev.pages} > {MAX_PAGES}")
-        raise OperationalFailure(run_id, f"page limit exceeded ({rev.pages} pages)")
+        return reading.fail(f"page_limit: {rev.pages} > {MAX_PAGES}", f"page limit exceeded ({rev.pages} pages)")
     any_scanned = "scanned" in rev.page_kinds
-    (Path(data_dir) / "evidence").mkdir(exist_ok=True)
+    reading.rev, reading.any_scanned = rev, any_scanned
+    (Path(data_dir) / "evidence").mkdir(parents=True, exist_ok=True)
     (Path(data_dir) / "evidence" / f"{rev.extraction_revision_id}.json").write_text(rev.to_json())
-    _emit(conn, run_id, "INGEST", "classified",
-          {"pages": rev.pages, "page_kinds": list(rev.page_kinds), "garbled_pages": list(rev.garbled_pages),
-           "extraction_revision_id": rev.extraction_revision_id, "blocks": len(rev.blocks)})
+    reading.emit("INGEST", "classified",
+                 {"pages": rev.pages, "page_kinds": list(rev.page_kinds), "garbled_pages": list(rev.garbled_pages),
+                  "extraction_revision_id": rev.extraction_revision_id, "blocks": len(rev.blocks)})
 
     # ---- DOCUMENT TYPE gate (code only, before any model call) ----
     page_texts = ["\n".join(b.text for b in rev.blocks if b.page == n) for n in range(1, rev.pages + 1)]
-    verdict = classify_document(str(stored), "\n".join(b.text for b in rev.blocks), rev.pages,
+    verdict = classify_document(stored, "\n".join(b.text for b in rev.blocks), rev.pages,
                                 rev.page_kinds, page_texts)
-    if as_invoice:
+    if ingest.as_invoice:
         verdict.forced = True
         verdict.invoice_like = True
         verdict.reasons = ["The reviewer asked for this document to be read as an invoice."] + verdict.reasons
     if not verdict.invoice_like:
-        return _finalize_not_invoice(conn, run_id, verdict, policy)
-    _emit(conn, run_id, "INGEST", "document_type", verdict.to_dict())
+        reading.not_invoice = verdict
+        return reading
+    reading.emit("INGEST", "document_type", verdict.to_dict())
 
     # ---- EXTRACT ----
     budget = CallBudget()
@@ -235,16 +291,17 @@ def _process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
         if any_scanned:
             page = rev.page_kinds.index("scanned") + 1
             try:
-                png = render_page_png(str(stored), page)
+                png = render_page_png(stored, page)
             except Exception as e:  # noqa: BLE001 — a page that cannot be rasterised is an explicit failure
-                _fail_run(conn, run_id, f"render_error: {type(e).__name__}")
-                raise OperationalFailure(run_id, f"page {page} could not be rendered ({type(e).__name__})") from e
+                reading.emit("EXTRACT", "attempts", {"attempts": budget.attempts})
+                return reading.fail(f"render_error: {type(e).__name__}",
+                                    f"page {page} could not be rendered ({type(e).__name__})")
             transcriptions = extract_scan(png, page, budget)
             try:
                 page_text = transcribe_page(png, page, budget)   # independent second reading
             except BudgetExceeded as e:
                 page_text = None
-                _emit(conn, run_id, "EXTRACT", "scan_verify_skipped", {"reason": str(e)})
+                reading.emit("EXTRACT", "scan_verify_skipped", {"reason": str(e)})
             for t in transcriptions:
                 fields[t.field] = FieldRecord(
                     field=t.field, status=t.status, raw_value=t.raw_value,
@@ -259,21 +316,50 @@ def _process_document(conn: sqlite3.Connection, pdf_path: str, filename: str,
                               "block_id": s.source_block_id},
                     checks=verify_selection(s, rev))
     except BudgetExceeded as e:
-        _emit(conn, run_id, "EXTRACT", "budget_exhausted", {"error": str(e), "attempts": budget.attempts})
-        gates = ResolverInput()  # nothing verified -> MISSING_FIELD hold with partial evidence
-        return _finalize_no_identity(conn, run_id, gates, policy)
-    finally:
-        _emit(conn, run_id, "EXTRACT", "attempts", {"attempts": budget.attempts})
+        reading.emit("EXTRACT", "budget_exhausted", {"error": str(e), "attempts": budget.attempts})
+        reading.emit("EXTRACT", "attempts", {"attempts": budget.attempts})
+        reading.budget_exhausted = True   # nothing verified -> MISSING_FIELD hold with partial evidence
+        return reading
+    except Exception as e:  # noqa: BLE001 — a reader that breaks in a new way must
+        # still leave a failed run with a stated reason, never one stuck "running"
+        reading.emit("EXTRACT", "attempts", {"attempts": budget.attempts})
+        return reading.fail(f"unexpected: {type(e).__name__}",
+                            f"the reading failed unexpectedly ({type(e).__name__})")
+    reading.emit("EXTRACT", "attempts", {"attempts": budget.attempts})
+    reading.fields, reading.page_text = fields, page_text
 
-    _emit(conn, run_id, "EXTRACT", "fields",
-          {f: {"status": r.status, "raw": r.raw_value, "checks": r.checks,
-               "read_method": r.read_method, "evidence": r.evidence} for f, r in fields.items()})
+    reading.emit("EXTRACT", "fields",
+                 {f: {"status": r.status, "raw": r.raw_value, "checks": r.checks,
+                      "read_method": r.read_method, "evidence": r.evidence} for f, r in fields.items()})
 
     # image-only document whose reading found nothing an invoice carries
-    if not as_invoice:
-        late = after_extraction(fields, any_scanned, page_text)
-        if late is not None:
-            return _finalize_not_invoice(conn, run_id, late, policy)
+    late = after_extraction(fields, any_scanned, page_text)
+    if late is not None:
+        if not ingest.as_invoice:
+            reading.not_invoice = late
+            return reading
+        # Overrides may read the file, but retain the non-invoice flag so the
+        # below-10 confidence rule can reject empty/unusable readings.
+        reading.emit("EXTRACT", "document_type", late.to_dict())
+    return reading
+
+
+def decide_document(conn: sqlite3.Connection, ingest: Ingest, reading: Reading, policy: Policy) -> CommitResult:
+    """DECIDE (under the worker lock): write the buffered events, then everything
+    that needs the registers and fresh ledger state — scan cross-checks, the
+    gates, the revision, vendor and identity, the commit."""
+    run_id = ingest.run_id
+    for stage, event_type, payload in reading.events:
+        _emit(conn, run_id, stage, event_type, payload)
+    if reading.failure is not None:
+        recorded, shown = reading.failure
+        _fail_run(conn, run_id, recorded)
+        raise OperationalFailure(run_id, shown)
+    if reading.not_invoice is not None:
+        return _finalize_not_invoice(conn, run_id, reading.not_invoice, policy)
+    if reading.budget_exhausted:
+        return _finalize_no_identity(conn, run_id, ResolverInput(), policy)
+    rev, fields, any_scanned = reading.rev, reading.fields, reading.any_scanned
 
     # ---- VALIDATE ----
     from .review import save_revision
@@ -383,7 +469,19 @@ def startup_recovery(conn: sqlite3.Connection) -> int:
     return cur.rowcount
 
 
-def process_document(conn, pdf_path, filename, policy, data_dir, retry_of=None, as_invoice=False):
+def _held(lock):
+    return lock if lock is not None else nullcontext()
+
+
+def process_document(conn, pdf_path, filename, policy, data_dir, retry_of=None, as_invoice=False, lock=None):
+    """One document, start to finish. With `lock`, only INGEST and DECIDE run
+    under it — the model calls do not — so other documents can be read while
+    this one is. Without it the caller has already serialized everything."""
     from .automation import finish_automation
-    result = _process_document(conn, pdf_path, filename, policy, data_dir, retry_of, as_invoice)
-    return finish_automation(conn, result)
+    with _held(lock):
+        ingest = ingest_document(conn, pdf_path, filename, data_dir, policy, retry_of, as_invoice)
+        if ingest.result is not None:
+            return finish_automation(conn, ingest.result, policy)
+    reading = read_document(ingest, data_dir)
+    with _held(lock):
+        return finish_automation(conn, decide_document(conn, ingest, reading, policy), policy)

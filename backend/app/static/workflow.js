@@ -42,6 +42,8 @@
         label: "Couldn’t process",
         action: "Resolve issue",
       };
+    if (run.disposition === "rejected" && (run.codes || run.snapshot?.codes || []).includes("UNSUPPORTED_DOCUMENT_TYPE"))
+      return { key: "rejected", label: "Rejected", action: "View reason" };
     const open = requests.filter((t) => t.status === "open");
     if (open.length)
       return {

@@ -77,11 +77,13 @@ async def lifespan(app: FastAPI):
     conn = connect(str(Path(DATA_DIR) / "app.db"))
     interrupted = startup_recovery(conn)
     seed_if_empty(conn)
+    from .automation import reconcile_non_invoice_holds
+    reconcile_non_invoice_holds(conn, settings.current_policy())
     settle_requests(conn, "system")
     app.state.conn = conn
     app.state.work_lock = threading.Lock()  # single bounded worker: one pipeline at a time
     app.state.interrupted_on_boot = interrupted
-    app.state.batches = BatchRegistry(conn, app.state.work_lock, process_document,
+    app.state.batches = BatchRegistry(conn, app.state.work_lock,
                                       settings.current_policy, DATA_DIR)
     sources = build_sources(DATA_DIR)
 
@@ -153,9 +155,11 @@ async def upload_invoice(file: UploadFile, user: dict = Depends(require_reviewer
         tmp.write(raw)
         tmp_path = tmp.name
     def work():
-        with app.state.work_lock:
-            return process_document(app.state.conn, tmp_path, file.filename or "upload.pdf",
-                                    settings.current_policy(), DATA_DIR)
+        # The lock goes IN, so it covers ingest and the decision but not the
+        # model call: a second upload arriving meanwhile is read alongside this
+        # one instead of queueing behind it.
+        return process_document(app.state.conn, tmp_path, file.filename or "upload.pdf",
+                                settings.current_policy(), DATA_DIR, lock=app.state.work_lock)
 
     try:
         result = await run_in_threadpool(work)
@@ -331,13 +335,14 @@ def edge_case_fixture(name: str):
 def list_runs():
     rows = app.state.conn.execute(
         "SELECT r.run_id, r.run_status, r.disposition, r.decision_mode, r.kind, "
-        "r.failure_reason, r.invoice_id, r.document_id, r.parent_run_id, r.created_at, r.finished_at, d.filename, "
+        "r.failure_reason, r.invoice_id, r.document_id, r.parent_run_id, r.created_at, r.finished_at, r.snapshot_json, d.filename, "
         "(SELECT fields_json FROM field_revisions f WHERE f.run_id=r.run_id ORDER BY seq DESC LIMIT 1) AS fields_json, "
         "(SELECT context_json FROM field_revisions f WHERE f.run_id=r.run_id ORDER BY seq DESC LIMIT 1) AS context_json "
         "FROM runs r JOIN documents d USING (document_id) ORDER BY r.created_at DESC, r.rowid DESC").fetchall()
     result = []
     for row in rows:
         item = dict(row)
+        item["codes"] = json.loads(item.pop("snapshot_json") or "{}").get("codes", [])
         fields = json.loads(item.pop('fields_json') or '{}')
         context = json.loads(item.pop('context_json') or '{}')
         item['summary'] = {name: rec.get('raw_value') for name, rec in fields.items()}
@@ -844,13 +849,19 @@ class SampleBatchBody(BaseModel):
 @app.get("/api/samples")
 def list_samples():
     entries = sample_manifest()
-    bundle = next((e for e in entries if e.get("onboarding") and e.get("recommended")), None)
-    if not bundle:
-        return []
-    included = set(bundle.get("members", [])) | {bundle["name"]}
-    # Test expectations stay in the internal fixture manifest, never the product catalog.
+    bundles = [e for e in entries if e.get("onboarding") and e.get("members")]
+    included = {name for b in bundles for name in [b["name"], *b["members"]]}
+    # Keep internal expected outcomes out of the public catalog.
     return [{k: v for k, v in e.items() if k not in ("expect", "next_step")}
             for e in entries if e["name"] in included]
+
+
+@app.get("/api/samples/{name}/download")
+def download_sample(name: str):
+    if name not in {e["name"] for e in list_samples()}:
+        raise HTTPException(404, "no such sample")
+    path = _sample_path(name)
+    return FileResponse(path, media_type="application/zip" if path.suffix == ".zip" else "application/pdf", filename=path.name)
 
 
 @app.post("/api/samples/run-batch")

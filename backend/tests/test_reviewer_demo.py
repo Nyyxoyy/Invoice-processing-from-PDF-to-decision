@@ -17,7 +17,7 @@ def test_starter_kit_real_pipeline_and_seed(tmp_path, monkeypatch):
     conn = connect(str(tmp_path / 'test.db'))
     seed_if_empty(conn)
     seed_if_empty(conn)
-    entries = [e for e in sample_manifest() if e.get('onboarding')]
+    entries = [e for e in sample_manifest() if e.get('dataset') == 'messy']
     bundle = next(e for e in entries if e.get('recommended'))
     with zipfile.ZipFile(ROOT / 'fixtures/pdfs' / bundle['name']) as z:
         assert z.namelist() == bundle['members']
@@ -74,11 +74,12 @@ def test_dataset_suppliers_are_registered_except_the_two_demo_unknowns(tmp_path)
 def test_public_dataset_only_contains_archive_members_without_predictions():
     from app.main import list_samples
     entries = list_samples()
-    bundle = next(e for e in entries if e.get('recommended'))
-    assert {e['name'] for e in entries} == set(bundle['members']) | {bundle['name']}
-    assert len(entries) == 8
+    bundles = [e for e in entries if e.get('members')]
+    assert {b['dataset']: len(b['members']) for b in bundles} == {'clean': 12, 'messy': 7, 'multi-currency': 9}
+    assert {e['name'] for e in entries} == {n for b in bundles for n in [b['name'], *b['members']]}
+    assert len(entries) == 31
     assert all('expect' not in e and 'next_step' not in e for e in entries)
-    assert all('DEMO-' in e['title'] for e in entries if e['name'].endswith('.pdf') and '07-' not in e['name'])
+    assert all('DEMO-' in e['title'] for e in entries if e.get('dataset') == 'messy' and e['name'].endswith('.pdf') and '07-' not in e['name'])
 
 
 def test_the_image_ships_every_file_the_dataset_page_needs():
@@ -91,3 +92,26 @@ def test_the_image_ships_every_file_the_dataset_page_needs():
     for needed in ('fixtures/pdfs', 'fixtures/reviewer-demo.json'):
         assert any(needed == c or needed.startswith(c.rstrip('/') + '/') for c in copied), \
             f'{needed} is not COPYed into the image'
+
+
+def test_new_batches_match_real_pipeline_and_currency_budgets(tmp_path, monkeypatch):
+    monkeypatch.setattr('app.pipeline.extract_native', stub_extract)
+    conn = connect(str(tmp_path / 'batches.db'))
+    seed_if_empty(conn)
+    entries = [e for e in sample_manifest() if e.get('dataset') in ('clean', 'multi-currency')]
+    for bundle in [e for e in entries if e.get('members')]:
+        with zipfile.ZipFile(ROOT / 'fixtures/pdfs' / bundle['name']) as archive:
+            assert archive.namelist() == bundle['members']
+            for name in bundle['members']:
+                assert archive.read(name) == (ROOT / 'fixtures/pdfs' / name).read_bytes()
+    for entry in [e for e in entries if e['name'].endswith('.pdf')]:
+        result = process_document(conn, str(ROOT / 'fixtures/pdfs' / entry['name']), entry['name'], DEFAULT_POLICY, str(tmp_path))
+        assert result.posted, (entry['name'], result.decision.codes)
+        assert saved_confidence(conn, result.run_id)['band'] == 'high'
+    assert conn.execute("SELECT count(*) FROM ledger_events WHERE kind='posting'").fetchone()[0] == 21
+    assert conn.execute('SELECT count(*) FROM tickets').fetchone()[0] == 0
+    # The normal duplicate protection still applies when a batch is rerun.
+    entry = next(e for e in entries if e['name'].endswith('.pdf'))
+    duplicate = process_document(conn, str(ROOT / 'fixtures/pdfs' / entry['name']), entry['name'], DEFAULT_POLICY, str(tmp_path))
+    assert not duplicate.posted
+    conn.close()

@@ -36,8 +36,13 @@ import threading
 import time
 import uuid
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import PurePosixPath
+
+# How many documents may be read at once. It lives with the model calls it
+# bounds; re-exported here because concurrency is configured per intake.
+from .extractor import extract_concurrency  # noqa: F401  (re-export)
 
 MAX_PDF_BYTES = 10 * 1024 * 1024        # same as the single-file endpoint
 MAX_ARCHIVE_BYTES = 60 * 1024 * 1024    # compressed ZIP upload
@@ -225,18 +230,26 @@ class Batch:
 
 
 class BatchRegistry:
-    """Owns batches and the background worker that drains them, one document
-    at a time, under the app's single worker lock."""
+    """Owns batches and the background workers that drain them.
 
-    def __init__(self, conn, work_lock: threading.Lock, process, policy, data_dir: str):
+    Documents are READ in parallel — that phase touches only files and the
+    model — while INGEST and DECIDE run under the app's single worker lock, so
+    duplicate detection and every ledger write stay strictly serialized. The
+    lock is passed into `process_document` rather than wrapped around it: wrap
+    it and the slow model call holds the lock, which is the whole reason a
+    batch used to run one document at a time.
+    """
+
+    def __init__(self, conn, work_lock: threading.Lock, policy, data_dir: str,
+                 concurrency: int | None = None):
         self._conn = conn
         self._lock = work_lock
-        self._process = process
         # A Policy, or a callable returning one. The app passes the callable so
         # each document is decided under the workspace settings in force when it
         # runs, not the ones that applied when the server booted.
         self._policy = policy
         self._data_dir = data_dir
+        self._concurrency = max(1, concurrency or extract_concurrency())
         self._batches: dict[str, Batch] = {}
         self._guard = threading.Lock()
         self._threads: list[threading.Thread] = []
@@ -281,36 +294,49 @@ class BatchRegistry:
                 del self._batches[bid]
 
     def _run(self, batch: Batch) -> None:
-        from .pipeline import OperationalFailure  # local import keeps this module import-light for tests
         batch.status = "running"
-        for item in batch.items:
-            if item.status != "queued":
-                continue
-            if self._closing:
-                item.status = "failed"
-                item.reason = "Server shut down before this document was processed."
-                _unlink(item.tmp_path)
-                item.tmp_path = None
-                continue
-            item.status = "running"
-            try:
-                with self._lock:
-                    result = self._process(self._conn, item.tmp_path, item.filename,
-                                           self._policy() if callable(self._policy) else self._policy,
-                                           self._data_dir)
-                item.run_id = result.run_id
-                item.route = result.decision.route.value
-                item.explanation = result.explanation
-                item.status = "done"
-            except OperationalFailure as e:
-                item.run_id = e.run_id
-                item.reason = e.reason
-                item.status = "failed"
-            except Exception as e:  # never let one document kill the batch thread
-                item.reason = f"Unexpected error: {e.__class__.__name__}"
-                item.status = "failed"
-            finally:
-                _unlink(item.tmp_path)
-                item.tmp_path = None
+        workers = max(1, min(self._concurrency, len(batch.items)))
+        if workers == 1:
+            for item in batch.items:
+                self._process_item(item)
+        else:
+            # Items are mutated in place, so the batch keeps the upload order
+            # however the readings interleave.
+            with ThreadPoolExecutor(max_workers=workers,
+                                    thread_name_prefix=f"read-{batch.batch_id}") as pool:
+                for done in as_completed([pool.submit(self._process_item, it) for it in batch.items]):
+                    done.result()   # _process_item swallows per-document failures; this re-raises ours
         batch.status = "done"
         batch.finished_at = time.time()
+
+    def _process_item(self, item: IntakeItem) -> None:
+        """One document, on its own thread. Every failure lands on the item, so
+        one bad document never stops the batch or kills the worker."""
+        from .pipeline import OperationalFailure, process_document  # keeps this module import-light for tests
+        if item.status != "queued":
+            return
+        if self._closing:
+            item.status = "failed"
+            item.reason = "Server shut down before this document was processed."
+            _unlink(item.tmp_path)
+            item.tmp_path = None
+            return
+        item.status = "running"
+        try:
+            result = process_document(self._conn, item.tmp_path, item.filename,
+                                      self._policy() if callable(self._policy) else self._policy,
+                                      self._data_dir, lock=self._lock)
+            item.run_id = result.run_id
+            item.route = result.decision.route.value
+            item.explanation = result.explanation
+            item.status = "done"
+        except OperationalFailure as e:
+            item.run_id = e.run_id
+            item.reason = e.reason
+            item.status = "failed"
+        except Exception as e:  # never let one document kill its worker
+            item.reason = f"Unexpected error: {e.__class__.__name__}"
+            item.status = "failed"
+        finally:
+            _unlink(item.tmp_path)
+            item.tmp_path = None

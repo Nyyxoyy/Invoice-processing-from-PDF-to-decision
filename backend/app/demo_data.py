@@ -32,6 +32,9 @@ DATASET_VENDORS = [
 ]
 
 DATASET_POS = [
+    # Separate budgets for the clean and multi-currency onboarding batches.
+    *[(f'PO-DEMO-{currency}', 'sup-demo-harbor', currency, 10000000, 'open')
+      for currency in ('USD', 'EUR', 'GBP', 'JPY')],
     ('PO-7101', 'sup-demo-harbor', 'USD', 1000000, 'open'),
     ('PO-7102', 'sup-demo-cedar', 'USD', 1000000, 'open'),
     # invoice-0-4.pdf names BPXPO-00536 in its header and two more orders inside

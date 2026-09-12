@@ -170,7 +170,7 @@ def test_sources_report_not_connected(client, monkeypatch):
     for k in ("GCS_BUCKET", "GDRIVE_FOLDER_ID", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_SERVICE_ACCOUNT_JSON"):
         monkeypatch.delenv(k, raising=False)
     srcs = {s["kind"]: s for s in client.get("/api/sources", headers=REVIEWER).json()}
-    assert set(srcs) == {"folder", "link", "mail", "gcs"}   # gdrive hidden until a service account is configured
+    assert set(srcs) == {"folder", "link", "mail", "gcs", "gdrive"}  # onboarding exposes connection setup
     for k in ("gcs", "mail"):
         assert srcs[k]["configured"] is False and srcs[k]["reason"] and srcs[k]["setup"]
     assert srcs["folder"]["configured"] and srcs["link"]["configured"]

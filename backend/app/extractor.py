@@ -10,7 +10,9 @@ Call budget: 3 logical calls (extract<=1, vision<=1, repair<=1),
 from __future__ import annotations
 
 import os
+import random
 import re
+import threading
 import time
 from typing import Literal
 from dataclasses import dataclass, field
@@ -107,6 +109,71 @@ class BudgetExceeded(Exception):
     pass
 
 
+# ---------------------------------------------------------------------------
+# Concurrency and backoff.
+#
+# Several documents are read at once (intake.BatchRegistry), so the ceiling on
+# outbound model calls belongs here, at the one place that makes them, rather
+# than at each caller. The gate bounds calls in flight across every thread; the
+# per-invoice CallBudget still bounds what one document may spend, so
+# parallelism changes wall time and never cost.
+#
+# A refused call is not a document problem. Rate limits and "unavailable" are
+# answers to try again after waiting, so those retries back off; anything else
+# retries at once. A backoff that would outlast the invoice's wall-clock budget
+# is not taken at all — holding the reviewer past their deadline to maybe get a
+# reading is worse than telling them the reading failed.
+# ---------------------------------------------------------------------------
+DEFAULT_EXTRACT_CONCURRENCY = 3
+RETRY_BASE_SECONDS = 2.0
+RETRY_JITTER_SECONDS = 0.5
+_RATE_LIMIT_CODES = {429, 500, 503}
+_RATE_LIMIT_WORDS = ("resource_exhausted", "rate limit", "quota", "unavailable",
+                     "too many requests", "overloaded")
+
+
+def extract_concurrency() -> int:
+    """How many documents may be read at once. Unset or unreadable falls back to
+    the default; never fewer than one reader."""
+    raw = os.environ.get("EXTRACT_CONCURRENCY")
+    if raw is None:
+        return DEFAULT_EXTRACT_CONCURRENCY
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return DEFAULT_EXTRACT_CONCURRENCY
+
+
+_GATE: threading.BoundedSemaphore | None = None
+_GATE_SIZE: int | None = None
+_GATE_GUARD = threading.Lock()
+
+
+def _gate() -> threading.BoundedSemaphore:
+    """The shared ceiling on model calls in flight. Rebuilt when the configured
+    size changes, so the setting can be changed without a restart."""
+    global _GATE, _GATE_SIZE
+    size = extract_concurrency()
+    with _GATE_GUARD:
+        if _GATE is None or _GATE_SIZE != size:
+            _GATE, _GATE_SIZE = threading.BoundedSemaphore(size), size
+        return _GATE
+
+
+def _sleep(seconds: float) -> None:
+    """Indirected so a test can observe a backoff without serving it."""
+    time.sleep(seconds)
+
+
+def _retry_after_waiting(e: Exception) -> bool:
+    """Did the endpoint refuse this call for load, rather than reject it?"""
+    code = getattr(e, "code", None) or getattr(e, "status_code", None)
+    if code in _RATE_LIMIT_CODES:
+        return True
+    text = str(e).lower()
+    return any(word in text for word in _RATE_LIMIT_WORDS)
+
+
 _CLIENT = None
 
 
@@ -128,19 +195,21 @@ def _generate(budget: CallBudget, kind: str, model: str, contents, schema):
     from google.genai import types
 
     last_err: Exception | None = None
+    client = _client()   # resolved once per logical call, then retried against
     while True:
         budget.outbound += 1
         t0 = time.monotonic()
         try:
-            resp = _client().models.generate_content(
-                model=model,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=schema,
-                    temperature=0,
-                ),
-            )
+            with _gate():   # held only for the call itself, never across a backoff
+                resp = client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=schema,
+                        temperature=0,
+                    ),
+                )
             usage = getattr(resp, "usage_metadata", None)
             budget.tokens_used += (getattr(usage, "prompt_token_count", 0) or 0) + \
                                   (getattr(usage, "candidates_token_count", 0) or 0)
@@ -159,6 +228,15 @@ def _generate(budget: CallBudget, kind: str, model: str, contents, schema):
             last_err = e
             if budget.retries_used >= budget.max_retries_total or budget.outbound >= budget.max_outbound:
                 raise BudgetExceeded(f"attempts exhausted: {e}") from last_err
+            if _retry_after_waiting(e):
+                wait = RETRY_BASE_SECONDS * (2 ** budget.retries_used) + random.uniform(0, RETRY_JITTER_SECONDS)
+                remaining = budget.wall_seconds - (time.monotonic() - budget.started)
+                if wait >= remaining:
+                    raise BudgetExceeded(
+                        f"the endpoint asked us to wait {wait:.1f}s, longer than this invoice has left"
+                    ) from last_err
+                budget.attempts[-1]["backoff_seconds"] = round(wait, 2)
+                _sleep(wait)
             budget.retries_used += 1
 
 

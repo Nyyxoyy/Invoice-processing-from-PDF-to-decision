@@ -55,7 +55,8 @@ def _bearer(request: Request) -> str | None:
 async def auth_gate(request: Request) -> None:
     """App-level dependency: every non-public route needs a valid role."""
     path = request.url.path
-    if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
+    if (path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES)
+            or (path.startswith("/api/samples/") and path.endswith("/download") and request.method == "GET")):
         request.state.user = None
         return
     user = resolve_user(_bearer(request))

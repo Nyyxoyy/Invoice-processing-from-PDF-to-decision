@@ -270,7 +270,7 @@ Deterministic tests never call the model; live behaviour is verified separately 
 
 ## 15. Theme, supplier management, re-check state (2026-09-10)
 
-- **Dark theme**: every colour in `app.css` is a semantic token; `[data-theme="dark"]` overrides them. Toggle in the top bar, persisted in `localStorage`, follows the OS preference by default, applied before first paint.
+- **Dark theme**: every colour in `app.css` is a semantic token; `[data-theme="dark"]` overrides them. The theme follows the browser's `prefers-color-scheme` only — there is no switch and nothing is stored — applied before first paint and updated live if the preference changes.
 - **Supplier management**: `PATCH /api/vendors/{id}` (rename keeps the old name as an alias; approved ↔ blocked) and `DELETE /api/vendors/{id}` (refused with an explanation when purchase orders or invoices reference the supplier). Cards on the Suppliers page expose Edit / Block / Delete with confirmations.
 - **Red re-check state**: after Check again, a still-held review result compares its open blockers with the previous result; blockers that survived render red with a "still unresolved" count, so the reviewer sees exactly what remains.
 

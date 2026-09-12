@@ -122,12 +122,6 @@ const state = {
 // default); the server still enforces what each role may do.
 const TOKEN_KEY = "role";
 const DEFAULT_ROLE = "reviewer";
-let onboardingComplete = false;
-try { onboardingComplete = localStorage.getItem("invoice-desk:onboarded") === "yes"; } catch(e) {}
-function completeOnboarding() {
-  onboardingComplete = true;
-  try { localStorage.setItem("invoice-desk:onboarded", "yes"); } catch(e) {}
-}
 
 const getToken = () => {
   try {
@@ -337,7 +331,8 @@ function checkAppVersion(version) {
     return;
   }
   if (version === loadedAppVersion || versionNoticeShown) return;
-  if (!unsaved() && !state.live) {
+  // a live reading or an open quick-resolve session is work in progress too
+  if (!unsaved() && !state.live && !state.resolve) {
     location.reload();
     return;
   }
@@ -456,24 +451,23 @@ function uploadButton(text = "Upload invoice") {
     ? ""
     : `<button class="primary" data-action="upload">${text}</button>`;
 }
-function applyTheme(theme, persist = true) {
-  document.documentElement.dataset.theme = theme;
-  if (persist) {
-    try {
-      localStorage.setItem("theme", theme);
-    } catch (e) {}
-  }
-  const button = $("#theme-toggle");
-  if (button) {
-    const dark = theme === "dark";
-    button.setAttribute("aria-pressed", String(dark));
-    button.querySelector(".theme-toggle-label").textContent = dark
-      ? "Light"
-      : "Dark";
-    button.title = dark ? "Switch to light theme" : "Switch to dark theme";
-  }
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = theme === "dark" ? "#0f151c" : "#f7f8fa";
+// The theme is the browser's preference, full stop: no switch, nothing stored.
+// The attribute (not a media query) keeps every [data-theme="dark"] rule and the
+// pre-paint script in index.html as they are; a change of preference while
+// the page is open is picked up live.
+// Held at module scope so the listener can never be collected with its list.
+const SYSTEM_THEME = matchMedia("(prefers-color-scheme: dark)");
+function followSystemTheme() {
+  const query = SYSTEM_THEME;
+  const apply = () => {
+    const theme = query.matches ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = theme === "dark" ? "#0f151c" : "#f7f8fa";
+  };
+  apply();
+  query.addEventListener("change", apply);
+  try { localStorage.removeItem("theme"); } catch (e) {}  // a preference saved by the old switch
 }
 async function renderLanding() {
   // No sign-in screen: the reviewer workspace opens directly. This is only
@@ -486,16 +480,71 @@ async function renderLanding() {
   $("#main").innerHTML =
     `<div class="landing"><div class="eyebrow">INVOICE DESK</div><h1>Couldn’t open the workspace</h1><p>${esc(state.sessionError || "The server did not respond.")}</p>${errorHTML("Check that the server is running, then try again.", "retry-session", "Try again")}</div>`;
 }
-function welcomePage() {
-  $('#main').innerHTML = `<div class="onboarding">
-    <div class="welcome-nav"><a class="welcome-brand" href="#home"><span class="brand-mark">i</span>Invoice desk</a></div>
-    <header class="welcome-intro"><span class="welcome-kicker">YOUR AI INVOICE WORKSPACE</span><h1>Start with an invoice.<br><span>Leave the busywork to AI.</span></h1><p>AI reads the details, checks the supplier and purchase order, and shows you what needs attention. Choose how you’d like to begin.</p></header>
-    <section class="entry-choices" aria-label="Choose your invoice source">
-      <article class="entry-card dataset-choice"><div class="entry-card-top"><span class="entry-icon" aria-hidden="true">▤</span><span class="entry-tag">A good place to start</span></div><h2>Upload from dataset</h2><p>Choose the complete invoice collection or select individual documents for processing.</p><div class="entry-meta"><span>Existing PDF library</span><span>No files needed</span></div><a class="button-link primary entry-cta" href="#dataset">Browse documents <span aria-hidden="true">→</span></a></article>
-      <article class="entry-card own-choice" id="drop-zone" aria-label="Drop your invoice PDFs here"><div class="entry-card-top"><span class="entry-icon" aria-hidden="true">↥</span><span class="entry-tag">Bring your own invoices</span></div><h2>Upload your own</h2><p>Choose an invoice from your computer, or drop files here. AI fills in the details and runs the same checks automatically.</p><div class="entry-meta"><span>PDF or ZIP of PDFs</span><span>Single invoice or batch</span></div><button class="entry-cta" data-action="upload">Choose your files <span aria-hidden="true">↑</span></button><button class="entry-cloud" data-action="cloud-import">Import from cloud</button><small>PDFs up to 10 MB / 10 pages each · up to 25 per batch</small></article>
-    </section><div id="upload-error" role="alert"></div>
-    <section class="welcome-process" aria-labelledby="next-heading"><div class="process-heading"><h2 id="next-heading">You upload. Here’s what happens next.</h2><span>One flow, whichever option you choose</span></div><ol><li><span class="step-number">01</span><div><h3>AI reads & fills</h3><p>Invoice details are extracted from the PDF. No form to fill out.</p></div></li><li><span class="step-number">02</span><div><h3>Matches & checks</h3><p>Supplier, PO and totals are checked. Missing records trigger a procurement request.</p></div></li><li><span class="step-number">03</span><div><h3>You see the result</h3><p>Get a confidence band and clear status. Eligible invoices are approved automatically.</p></div></li></ol></section>
-    <footer class="welcome-footer"><span>Review exceptions. Follow every invoice in the dashboard.</span><span>Demo workspace · No payments are sent</span></footer></div>`;
+const welcome = { tab: "upload", dataset: "messy", files: [], source: "gdrive", sources: [] };
+const welcomeSources = [
+  ["gdrive", "Google Drive"], ["gcs", "Google Cloud Storage"],
+  ["link", "Public links"], ["folder", "Watched folder"],
+];
+async function welcomePage() {
+  const generation = state.generation;
+  $('#main').innerHTML = `<div class="invoice-start">
+    <header><h1>Start with an invoice.</h1><p>AI reads each one, checks supplier and PO, and flags what needs you.</p></header>
+    <div class="intake-tabs" role="tablist" aria-label="Invoice source"><button role="tab" id="upload-tab" aria-controls="welcome-intake" data-action="welcome-tab" data-tab="upload">Upload ZIP / PDFs</button><button role="tab" id="storage-tab" aria-controls="welcome-intake" data-action="welcome-tab" data-tab="storage">Connect storage</button></div>
+    <section id="welcome-intake" role="tabpanel"></section>
+    <div id="upload-error" role="alert"></div>
+    <details class="welcome-samples" open><summary><span><strong>No invoices handy?</strong> Try a sample batch</span><span class="sample-chevron" aria-hidden="true">⌄</span></summary><div id="welcome-batches" aria-live="polite">Loading sample batches…</div></details>
+    <a class="welcome-workspace" href="#dashboard">Open existing workspace →</a>
+    </div>`;
+  renderWelcomeIntake();
+  try {
+    const [samples, sources] = await Promise.all([api('/api/samples'), api('/api/sources').catch(() => [])]);
+    if (generation !== state.generation) return;
+    state.samples = samples;
+    welcome.sources = sources;
+    renderWelcomeBatches();
+    if (welcome.tab === 'storage') renderWelcomeIntake();
+  } catch(e) {
+    if (generation === state.generation) $('#welcome-batches').innerHTML = errorHTML('Couldn’t load sample batches.', 'reload', 'Retry');
+  }
+}
+function renderWelcomeIntake() {
+  document.querySelectorAll('[data-action="welcome-tab"]').forEach(b => {
+    b.setAttribute('aria-selected', String(b.dataset.tab === welcome.tab));
+    b.tabIndex = b.dataset.tab === welcome.tab ? 0 : -1;
+  });
+  const panel = $('#welcome-intake');
+  panel.setAttribute('aria-labelledby', welcome.tab === 'upload' ? 'upload-tab' : 'storage-tab');
+  if (welcome.tab === 'upload') {
+    panel.innerHTML = `<div class="start-drop" id="drop-zone"><div><b>Drop a ZIP or PDFs</b> or <button class="text-button" data-action="upload">browse</button><small>PDFs ≤ 10 MB / 10 pages · up to 25 per batch</small></div></div><div class="staged-files" aria-live="polite">${welcome.files.length ? `<span>${welcome.files.map(f => esc(f.name)).join(', ')}</span><button class="text-button" data-action="clear-staged">Clear</button>` : ''}</div><button class="primary start-process" data-action="process-staged" ${welcome.files.length ? '' : 'disabled'}>Process invoices <span aria-hidden="true">→</span></button>`;
+    return;
+  }
+  const source = welcome.sources.find(s => s.kind === welcome.source);
+  const label = welcomeSources.find(s => s[0] === welcome.source)[1];
+  panel.innerHTML = `<div class="storage-options" role="group" aria-label="Storage provider">${welcomeSources.map(([kind, name]) => `<button aria-pressed="${kind === welcome.source}" data-action="welcome-source" data-kind="${kind}">${name}</button>`).join('')}</div>
+    <div class="storage-connect"><div class="storage-scope">${esc(source?.scope || (welcome.source === 'link' ? 'Public PDF / ZIP or shared Google Drive file URL' : welcome.source === 'folder' ? 'Choose a folder to watch' : `${label} folder or bucket`))}</div><button data-action="welcome-connect">${source?.configured ? 'Browse' : 'Connect'}</button></div>
+    <p class="storage-hint">${esc(source?.reason || (welcome.source === 'link' ? 'Import publicly accessible files using their links.' : welcome.source === 'folder' ? 'New files are picked up automatically from the watched folder.' : source?.configured ? 'Read-only access · select files to process.' : 'Connect a read-only service account to browse invoices.'))}</p>`;
+}
+function renderWelcomeBatches() {
+  const bundles = ['clean', 'messy', 'multi-currency'].map(kind => state.samples.find(s => s.dataset === kind && s.members)).filter(Boolean);
+  if (!bundles.length) {
+    $('#welcome-batches').innerHTML = errorHTML('Sample batches are unavailable.', 'reload', 'Retry');
+    return;
+  }
+  const selected = bundles.find(s => s.dataset === welcome.dataset) || bundles[0];
+  welcome.dataset = selected.dataset;
+  $('#welcome-batches').innerHTML = `<div class="batch-choices" role="group" aria-label="Sample batch">${bundles.map(b => `<button class="batch-choice" aria-pressed="${b === selected}" data-action="welcome-dataset" data-dataset="${esc(b.dataset)}"><span class="batch-choice-title">${esc(b.title)}<span class="choice-check" aria-hidden="true">${b === selected ? '✓' : ''}</span></span><span class="batch-description">${esc(b.blurb)}</span></button>`).join('')}</div><div class="sample-run-row"><button data-sample="${esc(selected.name)}">Run “${esc(selected.title)}” · ${selected.members.length} ${selected.dataset === 'messy' ? 'documents' : 'invoices'} <span aria-hidden="true">→</span></button><details class="sample-downloads"><summary>Download the ZIPs to upload yourself</summary><div>${bundles.map(b => `<a href="/api/samples/${encodeURIComponent(b.name)}/download" download>${esc(b.title)} ZIP ↓</a>`).join('')}</div></details></div>`;
+}
+function stageWelcomeFiles(files) {
+  const chosen = Array.from(files || []);
+  if (!chosen.length) return;
+  const invalid = chosen.find(f => (!isPdfName(f.name) && !isZipName(f.name)) || !f.size || f.size > (isZipName(f.name) ? 60 : 10) * 1024 * 1024);
+  if (invalid || chosen.length > 25) {
+    intakeError(invalid ? `Cannot use ${invalid.name}. Choose nonempty PDFs up to 10 MB or ZIPs up to 60 MB.` : 'Choose up to 25 documents per batch.');
+    return;
+  }
+  welcome.files = chosen;
+  $('#upload-error').innerHTML = '';
+  renderWelcomeIntake();
 }
 async function datasetPage(generation) {
   $('#main').innerHTML = `<div class="dataset-page"><div class="welcome-nav dataset-nav"><a class="welcome-brand" href="#home"><span class="brand-mark">i</span>Invoice desk</a></div><a class="back-link" href="#home">← Choose another way to start</a>${header('Select documents to process.', 'Upload the complete collection or choose individual PDFs below.')}<div id="dataset-content" aria-live="polite"><div class="skeleton" role="status">Loading documents…</div></div><section class="onboarding-upload" id="drop-zone" aria-label="Drop invoice PDFs or a ZIP archive"><div><h2>Upload your own documents</h2><p>Drop PDFs or a ZIP here, choose files from your computer, or import from cloud.</p><small>PDFs up to 10 MB / 10 pages each · up to 25 per batch</small></div><div class="upload-actions"><button class="primary" data-action="upload">Choose files</button><button data-action="cloud-import">Import from cloud</button></div></section><div id="upload-error" role="alert"></div></div>`;
@@ -528,15 +577,19 @@ async function route() {
     await renderLanding();
     return;
   }
-  let route = location.hash.slice(1) || (location.pathname === "/onboarding/dataset" ? "dataset" : location.pathname === "/app" ? (isAdmin() ? "queue" : "dashboard") : (isAdmin() ? "queue" : "home"));
+  let route = location.hash.slice(1) || (location.pathname === "/onboarding/dataset" ? "dataset" : location.pathname === "/app" ? (isAdmin() ? "queue" : "dashboard") : "home");
   const reviewDeepLink = route === "invoices?filter=review";
   if (reviewDeepLink) {
     route = "invoices";
     state.filter = isAdmin() ? "attention" : "review";
     state.search = "";
   }
-  if (onboardingComplete && ["home", "dataset"].includes(route)) route = "dashboard";
   const onboarding = ["home", "dataset"].includes(route);
+  if (onboarding && isAdmin()) {
+    setToken("reviewer");
+    await ensureSession();
+    if (generation !== state.generation) return;
+  }
   // Keep hash-based workspace navigation, but give onboarding its own URLs.
   // replaceState preserves live upload state while moving into the workspace.
   const canonicalURL = onboarding ? (route === "dataset" ? "/onboarding/dataset" : "/onboarding") : `/app#${route}${reviewDeepLink ? "?filter=review" : ""}`;
@@ -545,7 +598,7 @@ async function route() {
   document.documentElement.classList.toggle("onboarding-shell", onboarding);
   if (
     (route === "queue" && !isAdmin()) ||
-    (["requests", "home", "dataset"].includes(route) && isAdmin())
+    (route === "requests" && isAdmin())
   ) {
     location.hash = isAdmin() ? "queue" : "invoices";
     return;
@@ -766,7 +819,7 @@ function renderRows() {
         .map((r) => {
           const summary = { ...(r.summary || {}), ...Object.fromEntries(Object.entries(r.display || {}).filter(([, v]) => v)) },
             w = workState(r);
-          return `<tr><td><a class="invoice-link" href="#invoice/${encodeURIComponent(r.run_id)}">${esc(summary.supplier_name || r.filename)}</a><small class="invoice-sub">${esc(summary.invoice_number ? "#" + summary.invoice_number + " · " + r.filename : r.filename)}</small></td><td class="amount">${summary.invoice_gross_total ? `${esc(r.display?.invoice_gross_total || summary.invoice_gross_total)}${r.display?.invoice_gross_total && !r.display?.currency ? '<small class="muted-line">currency not confirmed</small>' : ""}` : "—"}</td><td>${isAdmin() ? badge(r) : `<span class="badge work-${w.key}">${esc(w.label)}</span>`}</td><td>${confidenceBadge(r.confidence)}</td><td class="col-date"><small>${esc(date(r.finished_at || r.created_at))}</small></td><td><a class="row-action" href="#invoice/${encodeURIComponent(r.run_id)}">${isAdmin() ? (r.disposition === "held" ? (state.procurementRuns?.has(r.run_id) ? "Resolve" : "With reviewer") : "View details") : w.action} →</a></td></tr>`;
+          return `<tr><td><a class="invoice-link" href="#invoice/${encodeURIComponent(r.run_id)}">${esc(summary.supplier_name || r.filename)}</a><small class="invoice-sub">${esc(summary.invoice_number ? "#" + summary.invoice_number + " · " + r.filename : r.filename)}</small></td><td class="amount">${summary.invoice_gross_total ? `${esc(r.display?.invoice_gross_total || summary.invoice_gross_total)}${r.display?.invoice_gross_total && !r.display?.currency ? '<small class="muted-line">currency not confirmed</small>' : ""}` : "—"}</td><td>${isAdmin() ? badge(r) : `<span class="badge work-${w.key}">${esc(w.label)}</span>`}</td><td>${confidenceBadge(r.confidence)}</td><td class="col-date"><small>${esc(date(r.finished_at || r.created_at))}</small></td><td><a class="row-action" href="#invoice/${encodeURIComponent(r.run_id)}"${resolvable(r) ? ` data-resolve-open="${esc(r.run_id)}"` : ""}>${isAdmin() ? (r.disposition === "held" ? (state.procurementRuns?.has(r.run_id) ? "Resolve" : "With reviewer") : "View details") : resolvable(r) ? "Resolve" : w.action} →</a></td></tr>`;
         })
         .join("")}</tbody></table></div>`
     : `<div class="empty"><h3>${state.search ? "No matching invoices" : state.filter === "waiting" ? "Nothing is waiting on procurement" : state.filter === "ready" ? "No replies to act on yet" : rows.length ? "You’re up to date" : "Your inbox is ready"}</h3><p>${state.search ? "Try a supplier, invoice number or filename." : !rows.length ? (isAdmin() ? "Invoices will appear when a reviewer uploads them." : "Add a PDF invoice to get started.") : "Invoices for this stage will appear here."}</p></div>`;
@@ -1020,7 +1073,6 @@ function renderBatch() {
   const d = b.data;
   const counts = d?.counts || {};
   const finished = (counts.done || 0) + (counts.failed || 0);
-  if (finished > 0) completeOnboarding();
   const toDo = (d?.total || 0) - (counts.skipped || 0);
   const done = d?.status === "done";
   const title = b.sending
@@ -1039,8 +1091,9 @@ function renderBatch() {
   const rows = (d?.items || [])
     .map((it) => {
       const [cls, label] = batchItemStatus(it);
+      const quick = it.route === "HOLD_REVIEW" && !isAdmin();
       const link = it.run_id
-        ? `<a class="button-link small" href="#invoice/${encodeURIComponent(it.run_id)}">${it.route === "HOLD_REVIEW" ? "Review" : "Open"} →</a>`
+        ? `<a class="button-link small" href="#invoice/${encodeURIComponent(it.run_id)}"${quick ? ` data-resolve-open="${esc(it.run_id)}" data-resolve-batch="${esc(d?.batch_id || "")}"` : ""}>${it.route === "HOLD_REVIEW" ? (quick ? "Resolve" : "Review") : "Open"} →</a>`
         : "";
       const meta = [
         it.source.startsWith("zip:") ? `from ${esc(it.source.slice(4))}` : "",
@@ -1052,13 +1105,14 @@ function renderBatch() {
       return `<li class="batch-row ${cls}"><span class="badge ${cls}">${label}</span><div class="batch-main"><b>${esc(it.filename)}</b>${meta ? `<p>${meta}</p>` : ""}</div>${link}</li>`;
     })
     .join("");
-  $("#main").innerHTML = `<div class="reading-wrap batch-wrap"><a href="#invoices" class="back-link">← Back to invoices${!done && d ? " · processing continues" : ""}</a><section class="card reading-card"><div class="eyebrow">BATCH CHECK</div><h1>${title}</h1><p class="reading-file">${sub}</p>${d ? `<div class="batch-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>` : ""}<div id="live-errors">${b.error ? errorHTML(b.error, "inbox", "Back to invoices") : ""}</div>${rows ? `<ul class="batch-list">${rows}</ul>` : ""}${done ? `<div class="reading-result"><p>${counts.done ? `${counts.done} document${counts.done === 1 ? "" : "s"} checked.` : ""} ${counts.failed ? `${counts.failed} couldn’t be read — open them for recovery options.` : ""} Open the dashboard for confidence scores and review items. Automatic procurement requests are in My requests.</p><div class="button-row"><a class="button-link primary" href="#dashboard">See results in dashboard →</a><a class="button-link" href="#requests">View procurement requests</a></div></div>` : d ? '<p class="reading-foot">You can leave this page. Each result appears in your inbox as it finishes.</p>' : ""}</section></div>`;
+  const heldItems = (d?.items || []).filter((it) => it.route === "HOLD_REVIEW" && it.run_id);
+  $("#main").innerHTML = `<div class="reading-wrap batch-wrap"><a href="#invoices" class="back-link">← Back to invoices${!done && d ? " · processing continues" : ""}</a><section class="card reading-card"><div class="eyebrow">BATCH CHECK</div><h1>${title}</h1><p class="reading-file">${sub}</p>${d ? `<div class="batch-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>` : ""}<div id="live-errors">${b.error ? errorHTML(b.error, "inbox", "Back to invoices") : ""}</div>${rows ? `<ul class="batch-list">${rows}</ul>` : ""}${done ? `<div class="reading-result"><p>${counts.done ? `${counts.done} document${counts.done === 1 ? "" : "s"} checked.` : ""} ${counts.failed ? `${counts.failed} couldn’t be read — open them for recovery options.` : ""} ${heldItems.length && !isAdmin() ? `${heldItems.length} need${heldItems.length === 1 ? "s" : ""} a decision from you — resolve them one after another without leaving this batch.` : "Open the dashboard for confidence scores and review items."} Automatic procurement requests are in My requests.</p><div class="button-row">${heldItems.length && !isAdmin() ? `<a class="button-link primary" href="#invoice/${encodeURIComponent(heldItems[0].run_id)}" data-resolve-open="${esc(heldItems[0].run_id)}" data-resolve-batch="${esc(d.batch_id)}">Resolve ${heldItems.length} invoice${heldItems.length === 1 ? "" : "s"} →</a><a class="button-link" href="#dashboard">See results in dashboard →</a>` : `<a class="button-link primary" href="#dashboard">See results in dashboard →</a>`}<a class="button-link" href="#requests">View procurement requests</a></div></div>` : d ? '<p class="reading-foot">You can leave this page. Each result appears in your inbox as it finishes.</p>' : ""}</section></div>`;
 }
 // ---- cloud import (Google Drive / Cloud Storage) -----------------------------
 // The server reports whether each source is connected. When it is not, the
 // modal explains what a deployment needs; when it is, files in the configured
 // folder/bucket can be picked and imported as a batch.
-async function cloudImportModal() {
+async function cloudImportModal(kind = null) {
   openModal({
     title: "Other ways to add invoices",
     subtitle: "Every route ends in the same checks as an upload.",
@@ -1089,7 +1143,7 @@ async function cloudImportModal() {
     const inline = s.mode === "links" || s.mode === "folder";
     return `<li class="source-row"><div class="source-main"><b>${esc(s.label)}</b><p>${status}</p>${inline ? action : ""}${!s.configured || s.mode === "folder" ? `<details class="compact-details"><summary>${s.configured ? "How it works" : "How to connect"}</summary><ol class="source-setup">${s.setup.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}</div>${inline ? "" : `<div class="source-action">${action}</div>`}</li>`;
   };
-  $("#modal-body").innerHTML = `<ul class="source-list">${sources.map(row).join("")}</ul><p class="muted source-foot">Files from any connector go through the same identity, duplicate and policy checks as an upload, and appear in the inbox one by one. Google Drive, Cloud Storage and mailbox connections are deployment settings (a service account or app password), not something a reviewer does here.</p>`;
+  $("#modal-body").innerHTML = `<ul class="source-list">${sources.filter(s => !kind || s.kind === kind).map(row).join("") || '<li class="source-row">This connection is unavailable. Refresh the page to check again.</li>'}</ul><p class="muted source-foot">Files from any connector go through the same identity, duplicate and policy checks as an upload, and appear in the inbox one by one. Google Drive, Cloud Storage and mailbox connections are deployment settings (a service account or app password), not something a reviewer does here.</p>`;
 }
 async function browseSource(kind) {
   $("#modal-body").innerHTML = '<p class="muted">Listing files…</p>';
@@ -1223,7 +1277,6 @@ async function pollLive(live) {
       live.finished =
         live.requestDone &&
         !["running", "queued"].includes(live.detail.run_status);
-      if (live.finished) completeOnboarding();
       live.error = null;
     } else if (live.requestDone && live.error) live.finished = true;
     live.pollErrors = 0;
@@ -1290,12 +1343,11 @@ function renderLive() {
       })
       .join(
         "",
-      )}</div><div id="live-errors">${l.error ? errorHTML(l.error, "inbox", "Back to invoices") : ""}</div>${stopped && l.detail ? `<div class="reading-result">${badge(l.detail)}<p>${l.detail.disposition === "approved" ? "This invoice is approved. No further review is needed." : l.detail.disposition === "held" ? "We need your help with a few details. Open the invoice to see what to do next." : l.detail.run_status === "failed" ? "We couldn’t read this PDF. Open the invoice for recovery options." : (l.detail.snapshot?.codes ?? []).includes("UNSUPPORTED_DOCUMENT_TYPE") ? "This file doesn’t look like an invoice, so nothing was read or approved. Open it to see what we found." : "Open the result to see why this invoice was rejected."}</p><a class="button-link primary" href="#invoice/${encodeURIComponent(l.runId)}">${l.detail.disposition === "held" ? "Review invoice" : "View result"} →</a></div>` : !stopped ? '<p class="reading-foot">You can leave this page. The result will appear in your inbox.</p>' : ""}</section></div>`;
+      )}</div><div id="live-errors">${l.error ? errorHTML(l.error, "inbox", "Back to invoices") : ""}</div>${stopped && l.detail ? `<div class="reading-result">${badge(l.detail)}<p>${l.detail.disposition === "approved" ? "This invoice is approved. No further review is needed." : l.detail.disposition === "held" ? "We need your help with a few details. Open the invoice to see what to do next." : l.detail.run_status === "failed" ? "We couldn’t read this PDF. Open the invoice for recovery options." : (l.detail.snapshot?.codes ?? []).includes("UNSUPPORTED_DOCUMENT_TYPE") ? "This file was rejected as not an invoice. No review is required. Open it to see what we found." : "Open the result to see why this invoice was rejected."}</p><a class="button-link primary" href="#invoice/${encodeURIComponent(l.runId)}">${l.detail.disposition === "held" ? "Review invoice" : "View result"} →</a></div>` : !stopped ? '<p class="reading-foot">You can leave this page. The result will appear in your inbox.</p>' : ""}</section></div>`;
 }
 async function detail(id, generation) {
   const d = await api(`/api/runs/${encodeURIComponent(id)}`);
   if (generation !== state.generation) return;
-  if (["completed", "failed"].includes(d.run_status)) completeOnboarding();
   if (["running", "queued"].includes(d.run_status)) {
     if (!state.live || state.live.runId !== id) {
       state.live = {
@@ -1381,9 +1433,15 @@ async function detail(id, generation) {
   const decisionCodes = new Set(dec?.codes ?? []);
   const notInvoice =
     key === "rejected" && decisionCodes.has("UNSUPPORTED_DOCUMENT_TYPE");
-  const docType = d.events
+  let docType = d.events
     .filter((e) => e.event_type === "document_type")
     .at(-1)?.payload;
+  const automaticNonInvoice = d.events.findLast(e => e.event_type === "non_invoice_auto_rejected")?.payload;
+  if (automaticNonInvoice) docType = {
+    ...docType, label: "not an invoice", automatic_rejection: true,
+    reasons: [`This file was flagged as not an invoice and scored ${automaticNonInvoice.score}/100, below the ${automaticNonInvoice.threshold}-point threshold.`,
+      "It was rejected automatically. No review or procurement action is required."],
+  };
   const supplierStateOnly =
     key === "rejected" &&
     decisionCodes.size > 0 &&
@@ -1441,7 +1499,7 @@ async function detail(id, generation) {
           ? notInvoiceHelp(docType)
           : rejectionHelp(dec);
   $("#main").innerHTML =
-    `<a href="${isAdmin() ? "#queue" : "#invoices"}" class="back-link">← ${isAdmin() ? "Requests" : "Invoice reviews"}</a><div class="page-heading detail-title"><div><h1>${esc(s.supplier_name || d.filename)}</h1><p>${esc(s.invoice_number ? "Invoice #" + s.invoice_number + " · " : "")}${esc(d.filename)} · ${esc(date(d.created_at))}</p></div>${uploadButton("Upload another")}</div>${confidencePanel(d.confidence)}${tickets.some(t => t.status === "open" && t.requested_by === "invoice-ai") ? `<div class="success-message">AI has created a procurement request with the invoice details. No request form is needed. <a href="${isAdmin() ? "#queue" : "#requests"}">View request →</a></div>` : ""}${child ? `<div class="success-message">This invoice has a newer result. <a href="#invoice/${encodeURIComponent(latestDescendant(id))}">Open latest result →</a></div>` : ""}<section class="card outcome ${key}${rechecked && persistent.size ? " rechecked" : ""}"><div class="outcome-head">${badge(d)}${rechecked && persistent.size ? `<span class="badge still-open">${persistent.size} still unresolved</span>` : ""}<h2>${title}</h2></div><p>${esc(description)}</p>${Object.keys(fields).length ? `<dl class="invoice-summary"><div><dt>Invoice total</dt><dd>${esc(s.invoice_gross_total ? (rv?.display?.invoice_gross_total ? s.invoice_gross_total : `${curr} ${s.invoice_gross_total}`) : "Not confirmed")}</dd></div><div><dt>Invoice date</dt><dd>${esc(s.invoice_date || "Not confirmed")}</dd></div><div><dt>Purchase order</dt><dd>${esc(s.po_reference || "Not selected")}</dd></div><div><dt>Supplier</dt><dd>${esc(s.supplier_name || "Not confirmed")}</dd></div></dl>` : ""}${noReading && !isAdmin() ? `<div class="button-row" style="margin-top:16px">${!child ? '<button class="primary" data-action="retry-reading">Try reading again</button>' : ""}<button data-action="upload">Upload a replacement PDF</button></div><div id="retry-error"></div>` : ""}${notInvoice ? notInvoicePanel(docType, child) : key === "rejected" ? duplicateLink(d, dec) : ""}</section><div class="review-layout"><div class="review-panel">${canReview ? reviewHTML(rv) : canProcure || (isAdmin() && supplierStateOnly && !!rv && !child && !postedRelated) ? procurementHTML(rv) : canRecheckRejected ? supplierRejectHTML(rv, decisionCodes) : `${isAdmin() && !child && tickets.length ? terminalRequestsHTML() : ""}${summaryHTML(fields)}`}<div id="review-notice" role="status"></div></div><section class="card document-panel" aria-label="Invoice document"><div class="document-header"><h2>Original invoice</h2><button class="mobile-document-toggle small" data-action="toggle-preview" aria-expanded="false">Show document</button><div class="page-controls" id="page-controls"></div></div><div class="document-canvas" id="document-canvas"><p>Loading document…</p></div><div class="document-caption" id="document-caption">Compare these details with your invoice.</div></section></div>${detailsHTML(d, dec, rv)}<p class="footer-note">Approval records an amount against a purchase order. This demo does not send payments.</p>`;
+    `<a href="${isAdmin() ? "#queue" : "#invoices"}" class="back-link">← ${isAdmin() ? "Requests" : "Invoice reviews"}</a><div class="page-heading detail-title"><div><h1>${esc(s.supplier_name || d.filename)}</h1><p>${esc(s.invoice_number ? "Invoice #" + s.invoice_number + " · " : "")}${esc(d.filename)} · ${esc(date(d.created_at))}</p></div>${uploadButton("Upload another")}</div>${confidencePanel(d.confidence)}${tickets.some(t => t.status === "open" && t.requested_by === "invoice-ai") ? `<div class="success-message">AI has created a procurement request with the invoice details. No request form is needed. <a href="${isAdmin() ? "#queue" : "#requests"}">View request →</a></div>` : ""}${child ? `<div class="success-message">This invoice has a newer result. <a href="#invoice/${encodeURIComponent(latestDescendant(id))}">Open latest result →</a></div>` : ""}<section class="card outcome ${key}${rechecked && persistent.size ? " rechecked" : ""}"><div class="outcome-head">${badge(d)}${rechecked && persistent.size ? `<span class="badge still-open">${persistent.size} still unresolved</span>` : ""}<h2>${title}</h2></div><p>${esc(description)}</p>${canReview && open.length ? `<div class="button-row" style="margin-top:14px"><a class="button-link primary" href="#invoice/${encodeURIComponent(id)}" data-resolve-open="${esc(id)}">Resolve step by step →</a></div>` : ""}${Object.keys(fields).length ? `<dl class="invoice-summary"><div><dt>Invoice total</dt><dd>${esc(s.invoice_gross_total ? (rv?.display?.invoice_gross_total ? s.invoice_gross_total : `${curr} ${s.invoice_gross_total}`) : "Not confirmed")}</dd></div><div><dt>Invoice date</dt><dd>${esc(s.invoice_date || "Not confirmed")}</dd></div><div><dt>Purchase order</dt><dd>${esc(s.po_reference || "Not selected")}</dd></div><div><dt>Supplier</dt><dd>${esc(s.supplier_name || "Not confirmed")}</dd></div></dl>` : ""}${noReading && !isAdmin() ? `<div class="button-row" style="margin-top:16px">${!child ? '<button class="primary" data-action="retry-reading">Try reading again</button>' : ""}<button data-action="upload">Upload a replacement PDF</button></div><div id="retry-error"></div>` : ""}${notInvoice ? notInvoicePanel(docType, child) : key === "rejected" ? duplicateLink(d, dec) : ""}</section><div class="review-layout"><div class="review-panel">${canReview ? reviewHTML(rv) : canProcure || (isAdmin() && supplierStateOnly && !!rv && !child && !postedRelated) ? procurementHTML(rv) : canRecheckRejected ? supplierRejectHTML(rv, decisionCodes) : `${isAdmin() && !child && tickets.length ? terminalRequestsHTML() : ""}${summaryHTML(fields)}`}<div id="review-notice" role="status"></div></div><section class="card document-panel" aria-label="Invoice document"><div class="document-header"><h2>Original invoice</h2><button class="mobile-document-toggle small" data-action="toggle-preview" aria-expanded="false">Show document</button><div class="page-controls" id="page-controls"></div></div><div class="document-canvas" id="document-canvas"><p>Loading document…</p></div><div class="document-caption" id="document-caption">Compare these details with your invoice.</div></section></div>${detailsHTML(d, dec, rv)}<p class="footer-note">Approval records an amount against a purchase order. This demo does not send payments.</p>`;
   renderDocument(id, generation);
 }
 function latestDescendant(id) {
@@ -1465,7 +1523,7 @@ function failureHelp(d) {
 }
 function notInvoiceHelp(docType) {
   const label = docType?.label && docType.label !== "not an invoice" ? `It reads as a ${docType.label}.` : "";
-  return `Nothing was read by the model and there is nothing to fill in. ${label} No amount was added to any purchase order.`.replace(/\s+/g, " ");
+  return `This document was rejected as not an invoice. There is nothing to review or fill in. ${label} No amount was added to any purchase order.`.replace(/\s+/g, " ");
 }
 function notInvoicePanel(docType, child) {
   const reasons = docType?.reasons ?? [];
@@ -1478,7 +1536,7 @@ function notInvoicePanel(docType, child) {
     sig.tax_words ? "a tax line" : null,
     sig.dates ? `${sig.dates} date${sig.dates === 1 ? "" : "s"}` : null,
   ].filter(Boolean);
-  return `<div class="not-invoice"><h3>What we found</h3><ul>${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>${sig.chars !== undefined ? `<p class="muted-line">Signals on the page: ${found.length ? esc(found.join(", ")) : "none of the usual invoice signals"}.</p>` : ""}${!isAdmin() ? `<div class="button-row" style="margin-top:14px"><button class="primary" data-action="upload">Upload the invoice</button>${!child ? '<button data-action="read-as-invoice" title="Skip the document-type check and read this file as an invoice">Read as an invoice anyway</button>' : ""}</div><div id="retry-error"></div>` : ""}<p class="muted-line" style="margin-top:12px">Every case we check for is listed under <a href="#edge-cases">Edge cases</a>.</p></div>`;
+  return `<div class="not-invoice"><h3>What we found</h3><ul>${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>${sig.chars !== undefined ? `<p class="muted-line">Signals on the page: ${found.length ? esc(found.join(", ")) : "none of the usual invoice signals"}.</p>` : ""}${!isAdmin() ? `<div class="button-row" style="margin-top:14px"><button class="primary" data-action="upload">Upload the invoice</button>${!child && !docType?.automatic_rejection ? '<button data-action="read-as-invoice" title="Skip the document-type check and read this file as an invoice">Read as an invoice anyway</button>' : ""}</div><div id="retry-error"></div>` : ""}<p class="muted-line" style="margin-top:12px">Every case we check for is listed under <a href="#edge-cases">Edge cases</a>.</p></div>`;
 }
 function rejectionHelp(dec) {
   const codes = dec?.codes ?? [];
@@ -2877,12 +2935,6 @@ async function handleAction(action, button) {
     });
     return;
   }
-  if (action === "toggle-theme") {
-    applyTheme(
-      document.documentElement.dataset.theme === "dark" ? "light" : "dark",
-    );
-    return;
-  }
   if (action === "context-reopen-po") {
     await withAction(button.closest(".callout"), async () => {
       await api(`/api/pos/${encodeURIComponent(button.dataset.id)}`, {
@@ -3024,6 +3076,12 @@ async function handleAction(action, button) {
     });
     return;
   }
+  if (action === "welcome-tab") { welcome.tab = button.dataset.tab; renderWelcomeIntake(); return; }
+  if (action === "welcome-source") { welcome.source = button.dataset.kind; renderWelcomeIntake(); return; }
+  if (action === "welcome-dataset") { welcome.dataset = button.dataset.dataset; renderWelcomeBatches(); return; }
+  if (action === "welcome-connect") { cloudImportModal(welcome.source); return; }
+  if (action === "clear-staged") { welcome.files = []; renderWelcomeIntake(); return; }
+  if (action === "process-staged") { upload(welcome.files); return; }
   if (action === "upload") {
     $("#file-input").click();
     return;
@@ -3299,6 +3357,12 @@ document.addEventListener("input", (e) => {
   }
 });
 document.addEventListener("click", async (e) => {
+  const opener = e.target.closest("[data-resolve-open]");
+  if (opener && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
+    e.preventDefault();
+    openResolve(opener.dataset.resolveOpen, { batchId: opener.dataset.resolveBatch || null });
+    return;
+  }
   const button = e.target.closest("button");
   if (button?.dataset.action) {
     e.preventDefault();
@@ -3386,8 +3450,16 @@ document.addEventListener("click", async (e) => {
       location.hash = anchor.hash;
   }
 });
+document.addEventListener("keydown", (e) => {
+  if (!e.target.matches('[data-action="welcome-tab"]') || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  welcome.tab = e.key === "Home" ? "upload" : e.key === "End" ? "storage" : welcome.tab === "upload" ? "storage" : "upload";
+  renderWelcomeIntake();
+  document.querySelector(`[data-action="welcome-tab"][data-tab="${welcome.tab}"]`).focus();
+});
 $("#file-input").addEventListener("change", (e) => {
-  upload(e.target.files);
+  if (state.route === "home") stageWelcomeFiles(e.target.files);
+  else upload(e.target.files);
   e.target.value = "";
 });
 document.addEventListener("dragover", (e) => {
@@ -3405,7 +3477,8 @@ document.addEventListener("drop", (e) => {
   if (zone) {
     e.preventDefault();
     zone.classList.remove("dragover");
-    upload(e.dataTransfer.files);
+    if (state.route === "home") stageWelcomeFiles(e.dataTransfer.files);
+    else upload(e.dataTransfer.files);
   }
 });
 window.addEventListener("beforeunload", (e) => {
@@ -3416,7 +3489,7 @@ window.addEventListener("beforeunload", (e) => {
 });
 window.addEventListener("hashchange", route);
 window.addEventListener("popstate", () => { if (!location.hash) route(); });
-applyTheme(document.documentElement.dataset.theme || "light", false);
+followSystemTheme();
 ensureSession().then(() => {
   route();
   refreshQueueCount();
@@ -3451,3 +3524,472 @@ setInterval(async () => {
       );
   }
 }, 7000);
+
+// ---- quick resolve ---------------------------------------------------------
+// One held invoice at a time, one decision at a time, keyboard first. The
+// decision model comes from resolve.js, built from the same review payload the
+// detail page uses; every confirm is one of the existing review calls, and
+// Approve is the same server-side re-evaluation as "Check again". The detail
+// page stays the deep view (activity, evidence, tickets) — this is the fast lane.
+const RESOLVE_ICON = { ok: "✓", warn: "!", wait: "…", none: "–", dot: "·", bad: "✕" };
+
+function resolvable(r) {
+  return !isAdmin() && r.run_status === "completed" && r.disposition === "held"
+    && ["review", "ready"].includes(workState(r).key);
+}
+// The queue is the inbox's own order (low-confidence holds first), or the
+// batch's order when opened from a batch. Only the latest attempt of each
+// invoice is ever a candidate.
+function resolveQueue(context) {
+  if (context.kind === "batch" && state.batch?.data?.items) {
+    const ids = state.batch.data.items.filter((it) => it.run_id).map((it) => latestDescendant(it.run_id));
+    return [...new Set(ids)].filter((id) => {
+      const run = state.runs.find((r) => r.run_id === id);
+      return run && resolvable(run);
+    });
+  }
+  const rows = currentRows().sort((a, b) =>
+    Number(b.confidence?.band === "low" && b.disposition === "held") - Number(a.confidence?.band === "low" && a.disposition === "held"));
+  return rows.filter(resolvable).map((r) => r.run_id);
+}
+async function openResolve(runId, opts = {}) {
+  if (isAdmin()) { location.hash = `invoice/${runId}`; return; }
+  const dlg = $("#resolve-dialog");
+  const batchId = opts.batchId || null;
+  let context;
+  if (batchId && state.batch?.data?.batch_id === batchId) {
+    const zip = state.batch.data.items.map((it) => it.source).find((src) => src?.startsWith("zip:"));
+    context = { kind: "batch", batchId, label: zip ? zip.slice(4) : state.batch.label || "Batch" };
+  } else if (state.route.startsWith("invoice/")) context = { kind: "detail", label: "Invoice details" };
+  else context = { kind: "inbox", label: "Invoice reviews" };
+  state.resolve = {
+    context, queue: [], index: 0, runId, loading: true, busy: false, error: null,
+    detail: null, review: null, tickets: [], doc: null, page: 1, decisions: [], steps: [],
+    active: -1, choice: {}, deferred: new Set(), result: null, rejecting: false, rejectReason: "",
+    finished: false, drafts: {}, highlight: null, afterClose: null,
+  };
+  if (!dlg.open) dlg.showModal();
+  resolveRender();
+  try {
+    // tickets too: resolvable() needs them to tell "with procurement" from "yours"
+    const [runs, vendors, pos, tickets] = await Promise.all([
+      api("/api/runs"), api("/api/vendors"), api("/api/pos"), api("/api/tickets?status=all")]);
+    if (!state.resolve) return;
+    state.runs = runs; state.vendors = vendors; state.pos = pos; state.allTickets = tickets;
+    const latest = latestDescendant(runId);
+    const queue = resolveQueue(context);
+    if (!queue.includes(latest)) queue.unshift(latest);
+    state.resolve.queue = queue;
+    state.resolve.index = queue.indexOf(latest);
+    await resolveLoad(latest);
+  } catch (e) {
+    if (state.resolve) { state.resolve.loading = false; state.resolve.error = e.message; resolveRender(); }
+  }
+}
+async function resolveLoad(runId) {
+  const r = state.resolve; if (!r) return;
+  Object.assign(r, {
+    runId, loading: true, busy: false, error: null, result: null, rejecting: false, rejectReason: "",
+    detail: null, review: null, tickets: [], doc: null, page: 1, decisions: [], steps: [], active: -1,
+    choice: {}, deferred: new Set(), drafts: {}, highlight: null,
+  });
+  resolveRender();
+  try {
+    const d = await api(`/api/runs/${encodeURIComponent(runId)}`);
+    if (state.resolve !== r || r.runId !== runId) return;
+    const [rv, tickets, doc] = await Promise.all([
+      api(`/api/runs/${encodeURIComponent(runId)}/review`).catch((e) => { if (e.status === 404) return null; throw e; }),
+      api(`/api/tickets?status=all&document_id=${encodeURIComponent(d.document_id)}`),
+      api(`/api/runs/${encodeURIComponent(runId)}/document`).catch(() => null),
+    ]);
+    if (state.resolve !== r || r.runId !== runId) return;
+    Object.assign(r, { detail: d, review: rv, tickets, doc, loading: false });
+    if (!rv) r.error = "No completed reading is available for this invoice — open its details to retry.";
+    else if (d.disposition !== "held") {
+      r.error = d.disposition === "approved" ? "This invoice is already approved." : d.disposition === "rejected" ? "This invoice was rejected." : "This invoice is still being processed.";
+      r.review = null;
+    }
+    resolveBuild();
+    resolveAdvance(null);
+  } catch (e) {
+    if (state.resolve !== r || r.runId !== runId) return;
+    r.loading = false; r.error = e.message;
+  }
+  resolveRender();
+}
+function resolveBuild() {
+  const r = state.resolve;
+  if (!r.review) { r.decisions = []; return; }
+  const openTickets = InvoiceWorkflow.latestRequests(r.tickets, r.detail.document_id)
+    .filter((t) => t.status === "open").map((t) => t.kind);
+  const pageText = (r.doc?.blocks || []).map((b) => b.text).join(" ");
+  r.decisions = InvoiceResolve.buildDecisions(r.review, {
+    vendors: state.vendors, openTickets, pageText, money, decimals: (c) => EXP[c] ?? 2, expected: EXPECTED, problemCopy,
+  });
+  // pills keep their place for the whole invoice: a confirmed decision shows as done, not gone
+  for (const d of r.decisions) if (!r.steps.some((s) => s.key === d.key)) r.steps.push({ key: d.key, step: d.step });
+  for (const d of r.decisions) {
+    if (!d.options.some((o) => o.id === r.choice[d.key])) {
+      const rec = d.options.find((o) => o.recommended);
+      r.choice[d.key] = rec ? rec.id : null;
+    }
+  }
+}
+// Next decision to show, walking the pills in order from the one just handled:
+// open and not deferred first, then anything open, then whatever is blocked or
+// with procurement. -1 means nothing left to decide.
+function resolveAdvance(afterKey) {
+  const r = state.resolve; const ds = r.decisions;
+  const order = r.steps.map((s) => s.key);
+  const start = afterKey ? order.indexOf(afterKey) : -1;
+  const pick = (pred) => {
+    for (let k = 1; k <= order.length; k++) {
+      const i = ds.findIndex((d) => d.key === order[(start + k) % order.length]);
+      if (i > -1 && pred(ds[i])) return i;
+    }
+    return -1;
+  };
+  let i = pick((d) => d.status === "open" && !r.deferred.has(d.key));
+  if (i < 0) i = pick((d) => d.status === "open");
+  if (i < 0) i = pick((d) => d.status === "blocked" || d.status === "waiting");
+  r.active = i;
+}
+function resolveCounts() {
+  const ds = state.resolve?.decisions || [];
+  return { open: ds.filter((d) => d.status === "open" || d.status === "blocked").length,
+           waiting: ds.filter((d) => d.status === "waiting").length };
+}
+function resolveCanApprove() {
+  const r = state.resolve;
+  if (!r || r.busy || r.result || r.rejecting || r.loading || !r.review) return false;
+  const c = resolveCounts();
+  return c.open === 0 && c.waiting === 0;
+}
+// Forward from the current position, then wrapping round to anything skipped
+// or deferred earlier — "next" means the next invoice still waiting on you,
+// wherever it sits in the list. Only the current one is never offered.
+function resolveNextEntry() {
+  const r = state.resolve; if (!r || !r.queue.length) return null;
+  for (let k = 1; k < r.queue.length; k++) {
+    const i = (r.index + k) % r.queue.length;
+    const id = latestDescendant(r.queue[i]);
+    const run = state.runs.find((x) => x.run_id === id);
+    if (run && resolvable(run)) return { i, id };
+  }
+  return null;
+}
+async function resolveNext() {
+  const r = state.resolve; if (!r || r.busy) return;
+  const n = resolveNextEntry();
+  if (!n) { r.finished = true; r.result = null; r.rejecting = false; resolveRender(); return; }
+  r.index = n.i; r.queue[n.i] = n.id;
+  await resolveLoad(n.id);
+}
+// Every queued invoice (the current one included) still waiting on the reviewer.
+function resolveRemaining() {
+  const r = state.resolve; if (!r) return [];
+  return r.queue.map((q, i) => ({ i, id: latestDescendant(q) }))
+    .filter(({ id }) => { const run = state.runs.find((x) => x.run_id === id); return run && resolvable(run); });
+}
+function closeResolve(hash) {
+  const r = state.resolve;
+  if (r) r.afterClose = hash || (r.context.kind === "detail" ? `invoice/${r.result?.runId || r.runId}` : null);
+  $("#resolve-dialog").close();
+}
+
+// ---- rendering --------------------------------------------------------------
+function resolveRender() {
+  const r = state.resolve; const dlg = $("#resolve-dialog");
+  if (!r || !dlg) return;
+  // what the reviewer typed survives a re-render (option change, error, save)
+  for (const el of dlg.querySelectorAll("input:not([type=radio]), textarea, select")) if (el.name) r.drafts[el.name] = el.value;
+  dlg.innerHTML = resolveHTML();
+  for (const el of dlg.querySelectorAll("input:not([type=radio]), textarea, select")) if (el.name && r.drafts[el.name] != null) el.value = r.drafts[el.name];
+  (dlg.querySelector("[data-autofocus]") || dlg).focus();
+}
+function resolveHTML() {
+  const r = state.resolve;
+  const next = resolveNextEntry();
+  const pos = r.queue.length ? `invoice ${r.index + 1} of ${r.queue.length}` : "";
+  const bar = `<header class="resolve-bar"><button type="button" class="resolve-back" data-resolve="close">← ${esc(r.context.label)}</button>${r.detail ? `<span class="resolve-sep" aria-hidden="true">|</span><code class="resolve-file">${esc(r.detail.filename)}</code>` : ""}${pos ? `<span class="resolve-sep" aria-hidden="true">·</span><span class="resolve-pos">${esc(pos)}</span>` : ""}<span class="resolve-spacer"></span><button type="button" class="resolve-next" data-resolve="next" ${next && !r.busy && !r.loading ? "" : "disabled"}>Next invoice →</button></header>`;
+  let body;
+  if (r.finished) {
+    // skipped or deferred invoices are still yours; say so rather than "caught up"
+    const left = resolveRemaining();
+    body = left.length
+      ? `<div class="resolve-empty"><span class="fi wait big" aria-hidden="true">…</span><h2>End of the list</h2><p>${left.length === 1 ? "One invoice you skipped still needs" : `${left.length} invoices you skipped still need`} a decision. ${left.length === 1 ? "It stays" : "They stay"} in your inbox; anything with procurement returns there when they reply.</p><div class="button-row" style="justify-content:center"><button type="button" class="primary" data-resolve="restart" data-autofocus>Review skipped →</button><button type="button" data-resolve="close">Back to ${esc(r.context.label)}</button></div></div>`
+      : `<div class="resolve-empty"><span class="fi ok big" aria-hidden="true">✓</span><h2>You’re caught up</h2><p>Every invoice in this ${r.context.kind === "batch" ? "batch" : "list"} that needed a decision has one. Anything with procurement returns to your inbox when they reply.</p><button type="button" class="primary" data-resolve="close" data-autofocus>Back to ${esc(r.context.label)}</button></div>`;
+  }
+  else if (r.loading)
+    body = `<div class="resolve-body"><section class="resolve-doc"><div class="skeleton" role="status">Loading the invoice…</div></section><aside class="resolve-side"><div class="skeleton" role="status" style="margin:24px">Working out what needs a decision…</div></aside></div>`;
+  else if (!r.review)
+    body = `<div class="resolve-empty"><h2>Nothing to decide here</h2><p>${esc(r.error || "This invoice has no open decisions.")}</p><div class="button-row" style="justify-content:center"><button type="button" class="primary" data-resolve="next" ${next ? "" : "disabled"} data-autofocus>Next invoice →</button><a class="button-link" href="#invoice/${encodeURIComponent(r.runId)}" data-resolve="open-detail" data-id="${esc(r.runId)}">Open invoice details</a></div></div>`;
+  else
+    body = `<div class="resolve-body"><section class="resolve-doc" aria-label="Invoice document">${resolveDocHTML()}</section><aside class="resolve-side" aria-label="Decisions">${resolveSideHTML()}</aside></div>`;
+  return bar + body;
+}
+function resolveDocHTML() {
+  const r = state.resolve; const doc = r.doc;
+  if (!doc?.pages?.length) return `<div class="resolve-doc-empty"><p>No document preview is available for this invoice.</p></div>`;
+  const pg = doc.pages[r.page - 1];
+  const active = r.decisions[r.active];
+  const flagged = new Map();
+  for (const d of r.decisions) for (const f of d.fields) flagged.set(f, d === active ? "active" : "flag");
+  if (r.highlight && !flagged.has(r.highlight)) flagged.set(r.highlight, "pin");
+  const boxes = [...flagged].map(([f, cls]) => {
+    const fld = r.review.fields?.[f];
+    const b = doc.blocks.find((x) => x.block_id === fld?.evidence?.block_id);
+    if (!b || b.page !== r.page) return "";
+    const d = r.decisions.find((x) => x.fields.includes(f));
+    const style = `left:${Math.max(0, ((b.x0 - 3) / pg.width) * 100)}%;top:${Math.max(0, ((b.top - 3) / pg.height) * 100)}%;width:${Math.min(100, ((b.x1 - b.x0 + 6) / pg.width) * 100)}%;height:${((b.bottom - b.top + 6) / pg.height) * 100}%`;
+    return `<button type="button" class="evidence-box ${cls}" style="${style}" data-resolve="box" data-field="${esc(f)}"${d ? ` data-decision="${esc(d.key)}"` : ""} aria-label="${esc(FIELD[f] || f)}: ${esc(fld.raw_value || "")}" title="${esc(FIELD[f] || f)}"></button>`;
+  }).join("");
+  const controls = doc.pages.length > 1
+    ? `<div class="resolve-pages"><button type="button" class="icon" data-resolve="page" data-dir="-1" aria-label="Previous page" ${r.page === 1 ? "disabled" : ""}>‹</button><span>Page ${r.page} of ${doc.pages.length}</span><button type="button" class="icon" data-resolve="page" data-dir="1" aria-label="Next page" ${r.page === doc.pages.length ? "disabled" : ""}>›</button></div>`
+    : "";
+  return `${controls}<div class="resolve-canvas"><div class="pdf-page"><img src="/api/runs/${encodeURIComponent(r.runId)}/page/${r.page}?role=${encodeURIComponent(getToken() || "")}" alt="Original invoice, page ${r.page}">${boxes}</div></div>`;
+}
+function resolveSideHTML() {
+  const r = state.resolve; const ds = r.decisions; const c = resolveCounts();
+  const rows = InvoiceResolve.fieldStates(r.review, ds);
+  const matched = rows.filter((x) => x.icon === "ok").length;
+  const active = ds[r.active] || null;
+  const stepIndex = active ? r.steps.findIndex((s) => s.key === active.key) : -1;
+  const heading = r.result ? (r.result.kind === "approved" ? "Approved" : "Rejected")
+    : active ? `Decision ${stepIndex + 1} of ${r.steps.length}` : c.waiting ? "With procurement" : "Ready to approve";
+  const head = `<div class="resolve-head"><h2>${esc(heading)}</h2><span class="resolve-meta">${c.open} left · ${matched} field${matched === 1 ? "" : "s"} matched</span></div>`;
+  const pills = r.steps.length
+    ? `<ol class="resolve-steps">${r.steps.map((s, i) => {
+        const d = ds.find((x) => x.key === s.key);
+        const done = !d;
+        const cls = done ? "done" : d === active ? "active" : d.status;
+        return `<li><button type="button" class="resolve-step ${cls}" data-resolve="step" data-key="${esc(s.key)}" ${done ? "disabled" : ""} aria-current="${d === active ? "step" : "false"}"><span class="n" aria-hidden="true">${done ? "✓" : i + 1}</span>${esc(s.step)}</button></li>`;
+      }).join("")}</ol>`
+    : "";
+  const card = r.result ? resolveResultHTML() : active ? resolveCardHTML(active) : resolveReadyHTML(c);
+  const list = `<ul class="resolve-fields">${rows.map((row) =>
+    `<li class="resolve-field ${row.icon}${active?.fields.includes(row.name) ? " active" : ""}"><button type="button" data-resolve="row" data-field="${esc(row.name)}"${row.decision ? ` data-decision="${esc(row.decision)}"` : ""}><span class="fi ${row.icon}" aria-hidden="true">${RESOLVE_ICON[row.icon]}</span><span class="fl">${esc(row.label)}</span><code class="fv">${esc(row.value || "—")}</code><span class="fs">${esc(row.text)}</span></button></li>`).join("")}</ul>`;
+  return head + pills + `<div class="resolve-scroll">${card}${list}</div>` + resolveFooterHTML(c);
+}
+function resolveCardHTML(d) {
+  const r = state.resolve;
+  const opt = d.options.find((o) => o.id === r.choice[d.key]) || null;
+  const head = `<div class="rc-head"><span class="fi ${d.status === "open" ? "warn" : "wait"}" aria-hidden="true">${d.status === "open" ? "!" : "…"}</span><span class="rc-title">${esc(d.title)}</span>${d.value ? `<code class="rc-value">${esc(d.value)}</code>` : ""}</div>`;
+  if (d.status === "blocked") {
+    const dep = r.decisions.find((x) => x.key === d.blockedBy);
+    return `<section class="resolve-card blocked">${head}<p class="rc-why">${esc(d.why)}</p><div class="rc-actions">${dep ? `<button type="button" class="primary" data-resolve="step" data-key="${esc(dep.key)}" data-autofocus>Go to ${esc(dep.step.toLowerCase())} →</button>` : ""}<button type="button" class="text" data-resolve="later">Decide later</button></div></section>`;
+  }
+  const ticket = d.waitingOn ? r.tickets.find((t) => t.kind === d.waitingOn && t.status === "open") : null;
+  const waiting = ticket
+    ? `<div class="rc-waiting">Request sent to procurement${ticket.requested_by === "invoice-ai" ? " by Invoice AI" : ""} · ${esc(dateTime(ticket.created_at))}. ${d.options.length ? "You can still pick an option below, or move on." : "Move on — this invoice returns to your inbox when they reply."}</div>`
+    : "";
+  const options = d.options.map((o, i) => resolveOptionHTML(d, o, i, o.id === r.choice[d.key])).join("");
+  const label = !opt ? "Choose an option"
+    : opt.action.type === "ticket" ? "Send request & next"
+    : opt.action.type === "reject" ? "Reject invoice…"
+    : opt.action.type === "confirm-distinct" ? "Confirm & next"
+    : opt.inputs || opt.select ? "Save & next"
+    : `Confirm & next · ${opt.label.length > 34 ? opt.label.slice(0, 32) + "…" : opt.label}`;
+  return `<section class="resolve-card ${d.status}">${head}<p class="rc-why">${esc(d.why)}</p>${waiting}${options ? `<div class="rc-options" role="radiogroup" aria-label="${esc(d.title)} options">${options}</div>` : ""}${d.evidence ? `<p class="rc-evidence"><b>Evidence:</b> ${esc(d.evidence)}</p>` : ""}${r.error ? `<p class="error-text" role="alert">${esc(r.error)}</p>` : ""}<div class="rc-actions">${d.options.length ? `<button type="button" class="primary rc-confirm" data-resolve="confirm" ${opt && !r.busy ? "" : "disabled"}>${r.busy ? "Saving…" : esc(label)} <kbd>↵</kbd></button>` : ""}<button type="button" class="text" data-resolve="later">Decide later</button></div></section>`;
+}
+function resolveOptionHTML(d, o, i, selected) {
+  const controls = !selected ? "" : [
+    ...(o.inputs || []).map((inp, k) => `<label class="rc-input"><span>${esc(FIELD[inp.field] || inp.field)}</span><input name="in-${esc(inp.field)}" value="${esc(inp.value || "")}" placeholder="${esc(EXPECTED[inp.field] || "")}" autocomplete="off"${k === 0 ? " data-autofocus" : ""}></label>`),
+    o.select ? `<select name="sel-${esc(d.key)}" class="rc-select" data-autofocus><option value="">${esc(o.select.placeholder || "Choose…")}</option>${o.select.choices.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("")}</select>` : "",
+    o.note ? `<textarea name="note-${esc(d.key)}" class="rc-note" rows="2" placeholder="${esc(o.note.placeholder || "")}" data-autofocus></textarea>` : "",
+  ].join("");
+  return `<label class="rc-option${selected ? " selected" : ""}${o.recommended ? " recommended" : ""}"><input type="radio" name="opt-${esc(d.key)}" value="${esc(o.id)}" data-resolve="option" data-key="${esc(d.key)}" ${selected ? "checked" : ""}><span class="rc-option-body"><span class="rc-option-head"><b>${esc(o.label)}</b><kbd class="rc-key" aria-hidden="true">${i + 1}</kbd></span>${o.recommended ? `<span class="rc-rec">AI recommends</span>` : ""}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}${controls}</span></label>`;
+}
+function resolveReadyHTML(c) {
+  const r = state.resolve; const s = r.review.display || {};
+  const po = r.review.fields?.po_reference?.raw_value;
+  if (c.waiting)
+    return `<section class="resolve-card waiting"><div class="rc-head"><span class="fi wait" aria-hidden="true">…</span><span class="rc-title">With procurement</span></div><p class="rc-why">Nothing left for you on this invoice until procurement replies. It returns to your inbox as “Ready to recheck”.</p>${r.error ? `<p class="error-text" role="alert">${esc(r.error)}</p>` : ""}</section>`;
+  return `<section class="resolve-card ready"><div class="rc-head"><span class="fi ok" aria-hidden="true">✓</span><span class="rc-title">All decisions made</span></div><p class="rc-why">Approve runs every check again and posts ${esc(s.invoice_gross_total || "the total")}${po ? ` against ${esc(po)}` : ""}. Anything still failing comes back here as a new decision.</p>${r.error ? `<p class="error-text" role="alert">${esc(r.error)}</p>` : ""}<div class="rc-actions"><button type="button" class="primary" data-resolve="approve" ${r.busy ? "disabled" : ""} data-autofocus>${r.busy ? "Checking…" : "Approve invoice"} <kbd>⌘↵</kbd></button></div></section>`;
+}
+function resolveResultHTML() {
+  const r = state.resolve; const ok = r.result.kind === "approved";
+  return `<section class="resolve-card result ${ok ? "approved" : "rejected"}"><div class="rc-head"><span class="fi ${ok ? "ok" : "bad"}" aria-hidden="true">${ok ? "✓" : "✕"}</span><span class="rc-title">${ok ? "Invoice approved" : "Invoice rejected"}</span></div><p class="rc-why">${esc(r.result.text)}</p><p class="rc-evidence"><a href="#invoice/${encodeURIComponent(r.result.runId)}" data-resolve="open-detail" data-id="${esc(r.result.runId)}">Open invoice details →</a></p></section>`;
+}
+function resolveFooterHTML(c) {
+  const r = state.resolve; const next = resolveNextEntry();
+  if (r.result)
+    return `<footer class="resolve-foot"><button type="button" class="primary resolve-primary" data-resolve="next" ${next ? "" : "disabled"} data-autofocus>${next ? "Next invoice <kbd>↵</kbd>" : "No more invoices to resolve"}</button><div class="resolve-foot-row"><button type="button" data-resolve="close">Back to ${esc(r.context.label)}</button></div></footer>`;
+  if (r.rejecting)
+    return `<footer class="resolve-foot rejecting"><label class="resolve-reason">Why should this invoice be rejected?<textarea name="reject-reason" rows="2" data-autofocus>${esc(r.rejectReason || "")}</textarea></label>${r.error ? `<p class="error-text" role="alert">${esc(r.error)}</p>` : ""}<div class="resolve-foot-row"><button type="button" class="danger" data-resolve="reject-confirm" ${r.busy ? "disabled" : ""}>${r.busy ? "Rejecting…" : "Reject invoice"}</button><button type="button" data-resolve="reject-cancel">Cancel</button></div><p class="resolve-hint">The reason goes back to the supplier and onto the audit trail. ↵ confirms.</p></footer>`;
+  const can = resolveCanApprove();
+  const primary = c.open ? `${c.open} decision${c.open === 1 ? "" : "s"} left to approve`
+    : c.waiting ? `Waiting on procurement · ${c.waiting} request${c.waiting === 1 ? "" : "s"}`
+    : r.busy ? "Checking…" : "Approve invoice";
+  return `<footer class="resolve-foot"><button type="button" class="primary resolve-primary" data-resolve="approve" ${can ? "" : "disabled"}>${esc(primary)} <kbd>⌘↵</kbd></button><div class="resolve-foot-row"><button type="button" data-resolve="skip" ${r.busy ? "disabled" : ""}>Skip invoice</button><button type="button" class="danger-outline" data-resolve="reject" ${r.busy ? "disabled" : ""}>Reject</button></div><p class="resolve-hint">${c.waiting && !c.open ? "Procurement has your request. Move on — this invoice returns to your inbox when they reply." : "Decisions can be made in any order. Dependent fields (purchase order, total) update automatically."}</p></footer>`;
+}
+
+// ---- actions ------------------------------------------------------------------
+// A decision can be acted on while it is open, and also while it is with
+// procurement — the card still offers the orders that exist (and mapping to an
+// approved supplier), which is often faster than waiting for the reply.
+const resolveActionable = (d) => !!d && (d.status === "open" || d.status === "waiting") && d.options.length > 0;
+async function resolveConfirm() {
+  const r = state.resolve; const d = r?.decisions[r.active];
+  if (!resolveActionable(d) || r.busy) return;
+  const opt = d.options.find((o) => o.id === r.choice[d.key]); if (!opt) return;
+  const dlg = $("#resolve-dialog");
+  const read = (name) => dlg.querySelector(`[name="${name}"]`)?.value?.trim() ?? "";
+  const action = { ...opt.action };
+  try {
+    if (opt.select) { action.value = read(`sel-${d.key}`); if (!action.value) throw new Error("Choose a supplier from the list."); }
+    if (opt.inputs && action.type === "correct") { action.value = read(`in-${opt.inputs[0].field}`); if (!action.value) throw new Error("Type the value as shown on the invoice."); }
+    if (action.type === "correct-many") {
+      action.values = {};
+      for (const inp of opt.inputs) { const v = read(`in-${inp.field}`); if (v && v !== (inp.value || "")) action.values[inp.field] = v; }
+      if (!Object.keys(action.values).length) throw new Error("Change at least one amount, or pick a correction above.");
+    }
+    if (opt.note) { action.note = read(`note-${d.key}`); if (action.note.length < 5) throw new Error("Say why this is a separate invoice — a few words, for the audit trail."); }
+  } catch (e) { r.error = e.message; resolveRender(); return; }
+  if (action.type === "reject") {
+    r.rejecting = true; r.rejectReason = action.reason || ""; r.error = null; delete r.drafts["reject-reason"];
+    resolveRender(); return;
+  }
+  r.busy = true; r.error = null; resolveRender();
+  try {
+    const id = r.runId; let seq = r.review.revision_seq;
+    const rp = (path, body) => post(`/api/runs/${encodeURIComponent(id)}/review/${path}`, body);
+    if (action.type === "correct") await rp("correct", { field: action.field, value: action.value, expected_seq: seq });
+    else if (action.type === "correct-many")
+      for (const [field, value] of Object.entries(action.values)) { const out = await rp("correct", { field, value, expected_seq: seq }); seq = out.revision_seq; }
+    else if (action.type === "attest") await rp("attest", { fields: action.fields, expected_seq: seq });
+    else if (action.type === "confirm-distinct") await rp("confirm-distinct", { note: action.note, expected_seq: seq });
+    else if (action.type === "ticket") await post("/api/tickets", { run_id: id, kind: action.kind, note: action.note || "" });
+    r.drafts = {}; r.deferred.delete(d.key);
+    await resolveReload();
+    if (state.resolve !== r) return;
+    resolveAdvance(d.key);
+    notice(action.type === "ticket" ? "Request sent to procurement." : `${d.title} saved.`);
+  } catch (e) { r.error = e.message; }
+  finally { if (state.resolve === r) { r.busy = false; resolveRender(); } }
+}
+async function resolveReload() {
+  const r = state.resolve; const id = r.runId;
+  const [rv, tickets] = await Promise.all([
+    api(`/api/runs/${encodeURIComponent(id)}/review`),
+    api(`/api/tickets?status=all&document_id=${encodeURIComponent(r.detail.document_id)}`),
+  ]);
+  if (state.resolve !== r || r.runId !== id) return;
+  r.review = rv; r.tickets = tickets;
+  resolveBuild();
+}
+async function resolveApprove() {
+  const r = state.resolve; if (!resolveCanApprove()) return;
+  r.busy = true; r.error = null; resolveRender();
+  try {
+    const id = r.runId;
+    const key = `${id}:approve:${r.review.revision_seq}`;
+    state.decisionKeys[key] ??= crypto.randomUUID();
+    const result = await post(`/api/runs/${encodeURIComponent(id)}/review/approve`, { idempotency_key: state.decisionKeys[key] });
+    state.runs = await api("/api/runs");
+    if (state.resolve !== r) return;
+    const newId = result.run_id || id;
+    r.queue[r.index] = newId;
+    if (result.posted) {
+      const s = r.review.display || {};
+      r.result = { kind: "approved", runId: newId,
+        text: `${s.invoice_gross_total || "The invoice total"} was posted against ${r.review.fields?.po_reference?.raw_value || "the purchase order"}.` };
+      r.busy = false; resolveRender(); return;
+    }
+    if (result.route === "REJECT") {
+      r.result = { kind: "rejected", runId: newId, text: result.explanation || "The invoice was rejected." };
+      r.busy = false; resolveRender(); return;
+    }
+    // still held: the full re-check surfaced more — follow the new attempt
+    notice("Still on hold — the remaining items are shown.");
+    await resolveLoad(newId);
+  } catch (e) {
+    if (state.resolve !== r) return;
+    r.error = e.message; r.busy = false; resolveRender();
+  }
+}
+async function resolveRejectConfirm() {
+  const r = state.resolve; if (!r || r.busy || !r.review) return;
+  const reason = $("#resolve-dialog").querySelector('[name="reject-reason"]')?.value.trim() || "";
+  if (reason.length < 5) { r.error = "Give a reason — it goes back to the supplier and onto the audit trail."; resolveRender(); return; }
+  r.busy = true; r.error = null; resolveRender();
+  try {
+    const id = r.runId;
+    const key = `${id}:reject:${r.review.revision_seq}`;
+    state.decisionKeys[key] ??= crypto.randomUUID();
+    const result = await post(`/api/runs/${encodeURIComponent(id)}/review/reject`, { idempotency_key: state.decisionKeys[key], reason });
+    state.runs = await api("/api/runs");
+    if (state.resolve !== r) return;
+    r.queue[r.index] = result.run_id || id;
+    r.rejecting = false;
+    r.result = { kind: "rejected", runId: result.run_id || id, text: `Rejected: ${reason}` };
+  } catch (e) { r.error = e.message; }
+  finally { if (state.resolve === r) { r.busy = false; resolveRender(); } }
+}
+
+// ---- events -------------------------------------------------------------------
+$("#resolve-dialog").addEventListener("click", (e) => {
+  const el = e.target.closest("[data-resolve]");
+  const r = state.resolve;
+  if (!el || !r || el.tagName === "INPUT") return;
+  const act = el.dataset.resolve;
+  if (act === "close") { e.preventDefault(); closeResolve(); }
+  else if (act === "next" || act === "skip") resolveNext();
+  else if (act === "restart") { const first = resolveRemaining()[0]; if (first) { r.finished = false; r.index = first.i; r.queue[first.i] = first.id; resolveLoad(first.id); } }
+  else if (act === "step") { const i = r.decisions.findIndex((d) => d.key === el.dataset.key); if (i > -1) { r.active = i; r.error = null; resolveRender(); } }
+  else if (act === "confirm") resolveConfirm();
+  else if (act === "later") { const d = r.decisions[r.active]; if (d) { r.deferred.add(d.key); resolveAdvance(d.key); r.error = null; resolveRender(); } }
+  else if (act === "approve") resolveApprove();
+  else if (act === "reject") { r.rejecting = true; r.rejectReason = ""; r.error = null; resolveRender(); }
+  else if (act === "reject-cancel") { r.rejecting = false; r.error = null; resolveRender(); }
+  else if (act === "reject-confirm") resolveRejectConfirm();
+  else if (act === "row" || act === "box") {
+    const i = r.decisions.findIndex((d) => d.key === el.dataset.decision);
+    if (i > -1) { r.active = i; r.error = null; }
+    r.highlight = el.dataset.field; resolveRender();
+  }
+  else if (act === "page") { r.page = Math.min(Math.max(1, r.page + Number(el.dataset.dir)), r.doc?.pages?.length || 1); resolveRender(); }
+  else if (act === "open-detail") { e.preventDefault(); closeResolve(`invoice/${el.dataset.id}`); }
+});
+$("#resolve-dialog").addEventListener("change", (e) => {
+  const el = e.target; const r = state.resolve;
+  if (!r || el.dataset?.resolve !== "option") return;
+  r.choice[el.dataset.key] = el.value; r.error = null; resolveRender();
+});
+$("#resolve-dialog").addEventListener("close", () => {
+  const r = state.resolve; state.resolve = null;
+  if (r?.afterClose) location.hash = r.afterClose;
+  route();
+});
+// Keys: ↵ confirms the highlighted option (or approves when nothing is left,
+// or moves on after a result); ⌘↵ approves; ↑↓ and 1–9 pick options. Buttons,
+// links and textareas keep their native Enter.
+document.addEventListener("keydown", (e) => {
+  const r = state.resolve; const dlg = $("#resolve-dialog");
+  if (!r || !dlg?.open) return;
+  const t = e.target;
+  const inField = !!t.matches?.("input, textarea, select");
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); resolveApprove(); return; }
+  if (e.key === "Enter") {
+    if (t.matches?.("textarea, button, a, summary, select")) return;
+    e.preventDefault();
+    if (r.result) { resolveNext(); return; }
+    if (r.rejecting) { resolveRejectConfirm(); return; }
+    const d = r.decisions[r.active];
+    if (resolveActionable(d)) { resolveConfirm(); return; }
+    resolveApprove(); return;
+  }
+  if (inField || r.result || r.rejecting) return;
+  const d = r.decisions[r.active];
+  if (!resolveActionable(d)) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const ids = d.options.map((o) => o.id); const cur = ids.indexOf(r.choice[d.key]);
+    const next = e.key === "ArrowDown" ? Math.min(ids.length - 1, cur + 1) : Math.max(0, cur - 1);
+    r.choice[d.key] = ids[next]; r.error = null; resolveRender(); return;
+  }
+  if (/^[1-9]$/.test(e.key) && d.options[Number(e.key) - 1]) {
+    e.preventDefault();
+    r.choice[d.key] = d.options[Number(e.key) - 1].id; r.error = null; resolveRender();
+  }
+});

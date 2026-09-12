@@ -287,11 +287,8 @@ def describe_sources() -> list[dict]:
             continue
         st = SOURCES[k].status()
         st.setdefault("mode", "files")
-        # Shared Drive folders are already covered by the watched-folder link
-        # mode; the service-account Drive connector (private folders) is only
-        # worth showing once a deployment has actually configured it.
-        if k == "gdrive" and not st["configured"]:
-            continue
+        # Onboarding lists Drive even before setup so its Connect panel can
+        # explain the required read-only service account and folder sharing.
         out.append(st)
     return out
 

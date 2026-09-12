@@ -13,3 +13,7 @@ test('the latest request for each kind replaces the previous reply',()=>{const o
 test('processing and failed readings have useful next actions',()=>{assert.equal(workState({...run,run_status:'running'},[request]).action,'View progress');assert.equal(workState({...run,run_status:'failed'},[]).action,'Resolve issue');});
 test('detected needs deduplicate only the matching open request kind across attempts',()=>{const needs=[{run_id:'child',asks:[{code:'NO_PO_MATCH'},{code:'PO_BUDGET_EXCEEDED'}]}];assert.deepEqual(unrequestedNeeds(needs,[request],[run])[0].asks,[{code:'PO_BUDGET_EXCEEDED'}]);assert.equal(unrequestedNeeds(needs,[{...request,status:'resolved'}],[run])[0].asks.length,2);});
 test('same-second response on the current run remains visible',()=>assert.equal(workState(run,[{...request,run_id:'child',status:'resolved',resolved_at:run.finished_at}]).key,'ready'));
+test('a rejected non-invoice never returns to review through old procurement requests',()=>{
+  const rejected={...run,disposition:'rejected',codes:['UNSUPPORTED_DOCUMENT_TYPE']};
+  for(const status of ['open','declined','resolved']) assert.equal(workState(rejected,[{...request,run_id:'child',status}]).key,'rejected');
+});

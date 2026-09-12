@@ -9,20 +9,20 @@
       // Select the onboarding shell before first paint, including old bookmarks.
       if (["#home", "#dataset"].includes(location.hash) || (!location.hash && location.pathname.startsWith("/onboarding")))
         document.documentElement.classList.add("onboarding-shell");
-      // Apply the saved theme before first paint so there is no light flash.
+      // The theme follows the browser (prefers-color-scheme) and nothing else.
+      // Applied before first paint so there is no light flash; app.js keeps it
+      // in step when the browser preference changes while the page is open.
       (function () {
         try {
-          var t = localStorage.getItem("theme");
-          if (t !== "dark" && t !== "light")
-            t = matchMedia("(prefers-color-scheme: dark)").matches
-              ? "dark"
-              : "light";
-          document.documentElement.dataset.theme = t;
+          document.documentElement.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
         } catch (e) {}
       })();
     </script>
     <link rel="stylesheet" href="/static/app.css" />
     <script src="/static/workflow.js" defer></script>
+    <script src="/static/resolve.js" defer></script>
     <script src="/static/app.js" defer></script>
   </head>
   <body>
@@ -83,17 +83,6 @@
             Switch role
           </button>
           <span class="demo-label">Demo workspace</span>
-          <button
-            id="theme-toggle"
-            class="theme-toggle"
-            type="button"
-            data-action="toggle-theme"
-            aria-pressed="false"
-            title="Switch between light and dark theme"
-          >
-            <span aria-hidden="true">◐</span
-            ><span class="theme-toggle-label">Dark</span>
-          </button>
         </div>
       </header>
       <main id="main" tabindex="-1"></main>
@@ -117,6 +106,8 @@
       </div>
       <div class="modal-body" id="modal-body"></div>
     </dialog>
+    <!-- Quick resolve: one held invoice, one decision at a time. Rendered by app.js. -->
+    <dialog id="resolve-dialog" class="resolve-dialog" aria-label="Resolve invoice" tabindex="-1"></dialog>
     <dialog id="confirm-dialog">
       <form method="dialog">
         <h2 id="confirm-title"></h2>

@@ -62,3 +62,62 @@ def test_duplicate_does_not_open_another_ticket(env):
     path = conn.execute('SELECT bytes_path FROM documents JOIN runs USING(document_id) WHERE run_id=?', (first.run_id,)).fetchone()[0]
     process_document(conn, path, 'duplicate.pdf', TICKET_POLICY, env[1])
     assert conn.execute('SELECT count(*) FROM tickets').fetchone()[0] == 1
+
+
+def test_empty_override_is_rejected_automatically(env, monkeypatch):
+    from app.pipeline import process_document
+    from app.doctype import DocTypeVerdict
+    from app.rules import Route, Code
+    from test_pipeline import make_pdf
+    conn, data_dir = env
+    path = data_dir + '/not-invoice.pdf'
+    make_pdf(path)
+    monkeypatch.setattr('app.pipeline.classify_document', lambda *a, **k: DocTypeVerdict('not_invoice', False, 'not an invoice', ['Presentation']))
+    first = process_document(conn, path, 'not-invoice.pdf', TICKET_POLICY, data_dir)
+    monkeypatch.setattr('app.pipeline.extract_native', lambda *a, **k: [])
+    retry = process_document(conn, path, 'not-invoice.pdf', TICKET_POLICY, data_dir, retry_of=first.run_id, as_invoice=True)
+    assert retry.decision.route == Route.REJECT
+    assert retry.decision.codes == (Code.UNSUPPORTED_DOCUMENT_TYPE,)
+    assert saved_confidence(conn, retry.run_id)['score'] == 5  # currency is still visible in the PDF
+    assert conn.execute('SELECT count(*) FROM tickets').fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM ledger_events WHERE kind='posting'").fetchone()[0] == 0
+
+
+def test_non_invoice_threshold_and_existing_holds(env, monkeypatch):
+    from app.automation import reject_low_confidence_non_invoice, reconcile_non_invoice_holds
+    from app.ledger import _emit
+    from app.review import load_latest, save_revision
+    conn, _ = env
+    result = run_pdf(env, 'threshold', tax='$400.00')
+    # Empty extraction alone does not reject a document classified as an invoice.
+    assert reject_low_confidence_non_invoice(conn, result.run_id, TICKET_POLICY, {'score': 0}) is None
+    _emit(conn, result.run_id, 'INGEST', 'document_type', {'kind': 'not_invoice', 'invoice_like': False})
+    for score in (10, 11, None):
+        assert reject_low_confidence_non_invoice(conn, result.run_id, TICKET_POLICY, {'score': score}) is None
+    assert reject_low_confidence_non_invoice(conn, result.run_id, TICKET_POLICY, {'score': 9}).decision.route.value == 'REJECT'
+    assert reconcile_non_invoice_holds(conn, TICKET_POLICY) == []
+    assert conn.execute("SELECT count(*) FROM run_events WHERE event_type='non_invoice_auto_rejected'").fetchone()[0] == 1
+
+
+def test_backfill_uses_ancestor_flag_and_current_fields(env):
+    from app.automation import reconcile_non_invoice_holds
+    from app.ledger import _emit
+    from app.review import load_latest, save_revision
+    conn, _ = env
+    result = run_pdf(env, 'legacy', tax='$400.00')
+    _, fields, context = load_latest(conn, result.run_id)
+    for field in fields.values():
+        field.status = 'missing'
+        field.raw_value = None
+    context['currency'] = {}
+    context['po_references'] = []
+    save_revision(conn, result.run_id, 'extraction', None, fields, context)
+    _emit(conn, result.run_id, 'INGEST', 'document_type', {'kind': 'not_invoice', 'invoice_like': False})
+    child = 'run_legacy_child'
+    document = conn.execute('SELECT document_id FROM runs WHERE run_id=?', (result.run_id,)).fetchone()[0]
+    conn.execute("INSERT INTO runs(run_id,document_id,parent_run_id,run_status,disposition) VALUES(?,?,?,'completed','held')", (child, document, result.run_id))
+    save_revision(conn, child, 'extraction', None, fields, context)
+    assert reconcile_non_invoice_holds(conn, TICKET_POLICY) == [child]
+    assert saved_confidence(conn, child)['score'] == 0
+    assert conn.execute('SELECT disposition FROM runs WHERE run_id=?', (result.run_id,)).fetchone()[0] == 'held'
+    assert reconcile_non_invoice_holds(conn, TICKET_POLICY) == []

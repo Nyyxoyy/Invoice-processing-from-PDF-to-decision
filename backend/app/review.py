@@ -1068,7 +1068,8 @@ def close_requests_for_final_invoice(conn, run_id: str, actor: str, disposition:
     doc = conn.execute("SELECT document_id FROM runs WHERE run_id=?", (run_id,)).fetchone()
     if doc is None:
         return []
-    note = f"Closed automatically: the invoice was {disposition} by the reviewer, so nothing more is needed."
+    decider = "Invoice AI" if actor == "invoice-ai" else "the reviewer"
+    note = f"Closed automatically: the invoice was {disposition} by {decider}, so nothing more is needed."
     closed = []
     rows = conn.execute(
         "SELECT t.* FROM tickets t JOIN runs r USING (run_id) WHERE t.status='open' AND r.document_id=?",
@@ -1241,7 +1242,7 @@ def _new_review_run(conn, original, actor: str, idem: str | None) -> str:
     return run_id
 
 
-def reevaluate(conn, run_id: str, actor: str, idempotency_key: str,
+def _reevaluate(conn, run_id: str, actor: str, idempotency_key: str,
                policy: Policy) -> CommitResult | dict:
     """Reviewer 'approve': reevaluate the latest revision against CURRENT
     policy, master data, and fresh ledger state. May create the invoice's
@@ -1409,3 +1410,11 @@ def po_candidates(conn, fields: dict[str, FieldRecord]) -> list[dict]:
         "SELECT po_id, currency, amount_minor, status FROM pos WHERE supplier_id=? AND status='open'",
         (vendor["supplier_id"],)).fetchall()
     return [dict(r) for r in rows]
+
+
+def reevaluate(conn, run_id: str, actor: str, idempotency_key: str, policy: Policy):
+    result = _reevaluate(conn, run_id, actor, idempotency_key, policy)
+    if isinstance(result, dict):
+        return result
+    from .automation import reject_low_confidence_non_invoice
+    return reject_low_confidence_non_invoice(conn, result.run_id, policy) or result

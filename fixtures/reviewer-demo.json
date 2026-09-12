@@ -1,10 +1,10 @@
 [
   {
     "name": "reviewer-starter-kit.zip",
-    "title": "Invoice collection",
+    "title": "Messy",
     "expect": "mixed",
-    "blurb": "Seven PDF documents in one ZIP archive.",
-    "category": "Invoice collection",
+    "blurb": "7 documents: unclear dates, missing PO, wrong totals.",
+    "category": "Messy",
     "onboarding": true,
     "recommended": true,
     "members": [
@@ -15,7 +15,8 @@
       "reviewer-05-totals.pdf",
       "reviewer-06-date.pdf",
       "reviewer-07-not-an-invoice.pdf"
-    ]
+    ],
+    "dataset": "messy"
   },
   {
     "name": "reviewer-01-office.pdf",
@@ -23,8 +24,9 @@
     "expect": "approved",
     "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
     "next_step": "No action needed. Open the approved invoice to see its confidence and checks.",
-    "category": "Invoice collection",
-    "onboarding": true
+    "category": "Messy",
+    "onboarding": true,
+    "dataset": "messy"
   },
   {
     "name": "reviewer-02-software.pdf",
@@ -32,8 +34,9 @@
     "expect": "approved",
     "blurb": "Invoice dated 2 September 2026 \u00b7 USD",
     "next_step": "No action needed. The approval is recorded against the software PO.",
-    "category": "Invoice collection",
-    "onboarding": true
+    "category": "Messy",
+    "onboarding": true,
+    "dataset": "messy"
   },
   {
     "name": "reviewer-03-new-supplier.pdf",
@@ -41,8 +44,9 @@
     "expect": "rejected",
     "blurb": "Invoice dated 3 September 2026 \u00b7 USD",
     "next_step": "Rejected: Summit Studio is not in the supplier register, and unknown suppliers are rejected by default. Ask procurement to onboard it and check the invoice again \u2014 or have procurement switch Unknown suppliers to \"raise an onboarding request\" on the Suppliers page.",
-    "category": "Invoice collection",
-    "onboarding": true
+    "category": "Messy",
+    "onboarding": true,
+    "dataset": "messy"
   },
   {
     "name": "reviewer-04-missing-po.pdf",
@@ -50,8 +54,9 @@
     "expect": "held",
     "blurb": "Invoice dated 4 September 2026 \u00b7 USD",
     "next_step": "AI requests a purchase order. Follow the ticket in My requests; no request form is needed.",
-    "category": "Invoice collection",
-    "onboarding": true
+    "category": "Messy",
+    "onboarding": true,
+    "dataset": "messy"
   },
   {
     "name": "reviewer-05-totals.pdf",
@@ -59,8 +64,9 @@
     "expect": "held",
     "blurb": "Invoice dated 5 September 2026 \u00b7 USD",
     "next_step": "Compare the extracted values with the PDF. Request a corrected invoice if the printed total is wrong.",
-    "category": "Invoice collection",
-    "onboarding": true
+    "category": "Messy",
+    "onboarding": true,
+    "dataset": "messy"
   },
   {
     "name": "reviewer-06-date.pdf",
@@ -68,8 +74,9 @@
     "expect": "held",
     "blurb": "Invoice document \u00b7 USD",
     "next_step": "Confirm the date with the supplier, correct it, then check the invoice again.",
-    "category": "Invoice collection",
-    "onboarding": true
+    "category": "Messy",
+    "onboarding": true,
+    "dataset": "messy"
   },
   {
     "name": "reviewer-07-not-an-invoice.pdf",
@@ -77,7 +84,240 @@
     "expect": "rejected",
     "blurb": "PDF document",
     "next_step": "View the rejection reason. No approval or procurement request should be created.",
-    "category": "Invoice collection",
-    "onboarding": true
+    "category": "Messy",
+    "onboarding": true,
+    "dataset": "messy"
+  },
+  {
+    "name": "onboarding-clean-01.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-01",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-02.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-02",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-03.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-03",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-04.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-04",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-05.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-05",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-06.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-06",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-07.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-07",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-08.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-08",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-09.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-09",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-10.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-10",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-11.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-11",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-clean-12.pdf",
+    "title": "Harbor Office Supplies \u00b7 CLEAN-12",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 USD",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "clean-invoices.zip",
+    "title": "Clean",
+    "blurb": "12 invoices, all matched.",
+    "category": "Clean",
+    "dataset": "clean",
+    "onboarding": true,
+    "expect": "approved",
+    "members": [
+      "onboarding-clean-01.pdf",
+      "onboarding-clean-02.pdf",
+      "onboarding-clean-03.pdf",
+      "onboarding-clean-04.pdf",
+      "onboarding-clean-05.pdf",
+      "onboarding-clean-06.pdf",
+      "onboarding-clean-07.pdf",
+      "onboarding-clean-08.pdf",
+      "onboarding-clean-09.pdf",
+      "onboarding-clean-10.pdf",
+      "onboarding-clean-11.pdf",
+      "onboarding-clean-12.pdf"
+    ]
+  },
+  {
+    "name": "onboarding-multi-currency-01.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-01",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 EUR",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-multi-currency-02.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-02",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 GBP",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-multi-currency-03.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-03",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 JPY",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-multi-currency-04.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-04",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 EUR",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-multi-currency-05.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-05",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 GBP",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-multi-currency-06.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-06",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 JPY",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-multi-currency-07.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-07",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 EUR",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-multi-currency-08.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-08",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 GBP",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "onboarding-multi-currency-09.pdf",
+    "title": "Harbor Office Supplies \u00b7 MULTI-CURRENCY-09",
+    "blurb": "Invoice dated 1 September 2026 \u00b7 JPY",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved"
+  },
+  {
+    "name": "multi-currency-invoices.zip",
+    "title": "Multi-currency",
+    "blurb": "9 invoices in EUR, GBP, JPY.",
+    "category": "Multi-currency",
+    "dataset": "multi-currency",
+    "onboarding": true,
+    "expect": "approved",
+    "members": [
+      "onboarding-multi-currency-01.pdf",
+      "onboarding-multi-currency-02.pdf",
+      "onboarding-multi-currency-03.pdf",
+      "onboarding-multi-currency-04.pdf",
+      "onboarding-multi-currency-05.pdf",
+      "onboarding-multi-currency-06.pdf",
+      "onboarding-multi-currency-07.pdf",
+      "onboarding-multi-currency-08.pdf",
+      "onboarding-multi-currency-09.pdf"
+    ]
   }
 ]

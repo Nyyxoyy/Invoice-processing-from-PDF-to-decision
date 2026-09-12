@@ -210,3 +210,23 @@ def test_entry_routes_reload_without_auth_headers(client, path):
     assert '/static/app.js' in response.text
     # Public page shells do not make invoice data public.
     assert client.get('/api/runs').status_code == 401
+
+
+def test_sample_downloads_are_public_and_limited_to_the_catalog(client):
+    import io
+    import zipfile
+    response = client.get('/api/samples/clean-invoices.zip/download')
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'application/zip'
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert len(archive.namelist()) == 12
+    assert client.get('/api/samples/samples.json/download').status_code == 404
+    assert client.get('/api/samples/not-a-sample.zip/download').status_code == 404
+    assert client.post('/api/samples/run-batch', json={'names': ['clean-invoices.zip']}).status_code == 401
+
+
+def test_onboarding_sources_include_unconfigured_drive_setup(client):
+    sources = client.get('/api/sources', headers=REVIEWER).json()
+    drive = next(s for s in sources if s['kind'] == 'gdrive')
+    assert 'configured' in drive
+    assert drive['setup']

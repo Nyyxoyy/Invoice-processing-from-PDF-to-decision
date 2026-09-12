@@ -15,6 +15,10 @@ COPY backend /srv/backend
 # documents to offer, so it ships alongside the PDFs it describes.
 COPY fixtures/pdfs /srv/fixtures/pdfs
 COPY fixtures/reviewer-demo.json /srv/fixtures/reviewer-demo.json
+# The Edge cases page reads its saved run results from here. Without them the
+# page still renders, but every row reads "Not run" and the evidence behind the
+# claims is missing from the deployed demo.
+COPY evidence /srv/evidence
 
 # the SQLite database and uploaded PDFs live here — mount a persistent volume on /data
 VOLUME ["/data"]
