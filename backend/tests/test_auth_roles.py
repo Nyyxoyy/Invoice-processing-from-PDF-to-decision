@@ -15,6 +15,20 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
+def _not_an_invoice() -> bytes:
+    """A PDF that no reader is ever asked about: the document-type gate refuses
+    it on its text alone."""
+    import fitz
+    doc = fitz.open()
+    page = doc.new_page()
+    y = 60
+    for line in ["Jane Doe — Curriculum Vitae", "Senior Software Engineer",
+                 "Skills: Python, distributed systems", "References available on request."]:
+        page.insert_text((50, y), line, fontsize=11)
+        y += 20
+    return doc.tobytes()
+
+
 ADMIN = {"Authorization": "Bearer admin-demo"}
 REVIEWER = {"Authorization": "Bearer reviewer-demo"}
 
@@ -37,18 +51,41 @@ def test_role_is_the_token_no_passwords(client):
     assert client.post("/api/auth/login", json={"code": "x"}).status_code in (404, 405)  # gone
 
 
-def test_reviewer_cannot_touch_master_data_or_reset(client):
+def test_reviewer_cannot_touch_master_data(client):
     assert client.post("/api/vendors", json={"name": "New Co"}, headers=REVIEWER).status_code == 403
     assert client.patch("/api/vendors/sup-northwind", json={"status": "blocked"}, headers=REVIEWER).status_code == 403
     assert client.delete("/api/vendors/sup-shady", headers=REVIEWER).status_code == 403
     assert client.post("/api/pos", json={"po_id": "PO-9", "supplier_id": "sup-northwind", "currency": "USD", "amount": "1.00"},
                        headers=REVIEWER).status_code == 403
     assert client.patch("/api/pos/PO-1001", json={"status": "closed"}, headers=REVIEWER).status_code == 403
-    assert client.post("/api/admin/reset", headers=REVIEWER).status_code == 403
     assert client.get("/api/queue/procurement", headers=REVIEWER).status_code == 403
     # reads stay open to reviewers
     assert client.get("/api/vendors", headers=REVIEWER).status_code == 200
     assert client.get("/api/pos", headers=REVIEWER).status_code == 200
+
+
+def test_either_role_may_reset_but_only_its_own_workspace(client):
+    """Reset is no longer master data: a workspace belongs to the browser that
+    holds its id, so each role may clear their own, and clearing one leaves
+    every other workspace untouched."""
+    mine = {**REVIEWER, "X-Workspace": "reviewer-space-001"}
+    theirs = {**ADMIN, "X-Workspace": "admin-space-0002"}
+    for headers in (mine, theirs):
+        assert client.post("/api/admin/reset", headers=headers).status_code == 200
+
+    # A run in one workspace survives a reset of the other. The document is not
+    # an invoice, so it is decided by the type gate without calling the model,
+    # and it still leaves a run behind — which is all this test needs.
+    assert client.post("/api/invoices", headers=mine,
+                       files={"file": ("cv.pdf", _not_an_invoice(), "application/pdf")}).status_code == 200
+    before = len(client.get("/api/runs", headers=mine).json())
+    assert before == 1
+    assert client.post("/api/admin/reset", headers=theirs).json()["ok"] is True
+    assert len(client.get("/api/runs", headers=mine).json()) == before
+    assert client.get("/api/runs", headers=theirs).json() == []
+    # and resetting mine clears mine
+    client.post("/api/admin/reset", headers=mine)
+    assert client.get("/api/runs", headers=mine).json() == []
 
 
 def test_admin_cannot_approve_or_upload(client):
@@ -133,7 +170,9 @@ def _held_run_in(data_dir, name, **kw):
     from app.policy import DEFAULT_POLICY
     import app.pipeline as pipeline_mod
     from tests.test_pipeline import stub_extract
-    conn = connect(f"{data_dir}/app.db"); seed_if_empty(conn)
+    from app.workspaces import shared_dir
+    ws_dir = shared_dir(data_dir); ws_dir.mkdir(parents=True, exist_ok=True)
+    conn = connect(str(ws_dir / "app.db")); seed_if_empty(conn)
     doc = fitz.open(); page = doc.new_page(); y = 60
     rows = [kw.get("supplier", "Northwind Supplies LLC"), f"Invoice No: {kw.get('invoice_no', 'X-1')}", "Invoice Date: 2026-08-28",
             f"PO Reference: {kw.get('po', 'PO-1001')}", "Bill To: Acme Corporation", "Currency: USD",

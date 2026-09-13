@@ -123,6 +123,22 @@ const state = {
 const TOKEN_KEY = "role";
 const DEFAULT_ROLE = "reviewer";
 
+// This browser's workspace. The demo is public, so what you upload, the orders
+// you spend and the reset button are yours alone; the id is generated here,
+// never issued by the server, and lives only in this browser.
+const WORKSPACE_KEY = "invoice-desk-workspace";
+const getWorkspace = () => {
+  try {
+    let id = localStorage.getItem(WORKSPACE_KEY);
+    if (!id) {
+      id = (crypto.randomUUID?.() || String(Math.random()).slice(2) + Date.now()).replace(/[^A-Za-z0-9_-]/g, "");
+      localStorage.setItem(WORKSPACE_KEY, id);
+    }
+    return id;
+  } catch (e) {
+    return "";   // storage blocked: the server falls back to the shared demo
+  }
+};
 const getToken = () => {
   try {
     return localStorage.getItem(TOKEN_KEY) || DEFAULT_ROLE;
@@ -348,6 +364,8 @@ async function api(path, options = {}) {
     const headers = { ...(options.headers || {}) };
     if (token && !path.startsWith("/api/auth/login"))
       headers.Authorization = `Bearer ${token}`;
+    const workspace = getWorkspace();
+    if (workspace) headers["X-Workspace"] = workspace;
     const response = await fetch(path, {
       ...options,
       headers,
@@ -515,7 +533,7 @@ function renderWelcomeIntake() {
   const panel = $('#welcome-intake');
   panel.setAttribute('aria-labelledby', welcome.tab === 'upload' ? 'upload-tab' : 'storage-tab');
   if (welcome.tab === 'upload') {
-    panel.innerHTML = `<div class="start-drop" id="drop-zone"><div><b>Drop a ZIP or PDFs</b> or <button class="text-button" data-action="upload">browse</button><small>PDFs ≤ 10 MB / 10 pages · up to 25 per batch</small></div></div><div class="staged-files" aria-live="polite">${welcome.files.length ? `<span>${welcome.files.map(f => esc(f.name)).join(', ')}</span><button class="text-button" data-action="clear-staged">Clear</button>` : ''}</div><button class="primary start-process" data-action="process-staged" ${welcome.files.length ? '' : 'disabled'}>Process invoices <span aria-hidden="true">→</span></button>`;
+    panel.innerHTML = `<div class="start-drop" id="drop-zone"><div><b>Drop a ZIP or PDFs</b> or <label class="text-button" for="file-input" tabindex="0" role="button">browse</label><small>PDFs ≤ 10 MB / 10 pages · up to 25 per batch</small></div></div><div class="staged-files" aria-live="polite">${welcome.files.length ? `<span>${welcome.files.map(f => esc(f.name)).join(', ')}</span><button class="text-button" data-action="clear-staged">Clear</button>` : ''}</div><button class="primary start-process" data-action="process-staged" ${welcome.files.length ? '' : 'disabled'}>Process invoices <span aria-hidden="true">→</span></button>`;
     return;
   }
   const source = welcome.sources.find(s => s.kind === welcome.source);
@@ -624,7 +642,7 @@ async function route() {
           home: "Welcome",
           dataset: "Invoice dataset",
           invoices: "Invoices",
-          dashboard: "AI dashboard",
+          dashboard: "Dashboard",
           pos: "Purchase orders",
           vendors: "Suppliers",
           activity: "Activity log",
@@ -709,13 +727,25 @@ async function inbox(generation = state.generation) {
   renderRows();
   loadSamples();
 }
+// "Northwind Supplies LLC" then "Invoice #NW-1 · nw.pdf · 12 Sept". When the
+// heading is already the file name — no supplier could be read — it is not
+// repeated underneath it.
+function detailSubtitle(d, summary) {
+  const parts = [];
+  if (summary.invoice_number) parts.push("Invoice #" + summary.invoice_number);
+  if (summary.supplier_name) parts.push(d.filename);
+  parts.push(date(d.created_at));
+  return parts.join(" · ");
+}
 function confidenceBadge(c) {
   if (!c || c.score == null) return '<span class="confidence unavailable">Not scored</span>';
   return `<span class="confidence ${esc(c.band)}" title="${esc((c.reasons || []).join(' · '))}">${esc(c.band)} · ${c.score}/100</span>`;
 }
-function confidencePanel(c) {
-  if (!c) return '';
-  return `<section class="card confidence-panel"><div><h2>AI confidence ${confidenceBadge(c)}</h2><p>Based on extracted evidence and supplier / PO checks. Confidence does not override approval rules.</p></div><ul>${(c.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul></section>`;
+// The score sits in the header beside the status badge; the evidence behind it
+// is one click away rather than a card of its own.
+function confidenceReasons(c) {
+  if (!c || c.score == null || !(c.reasons || []).length) return '';
+  return `<details class="confidence-why"><summary>How the reading was scored${c.score != null ? ` · ${c.score}/100` : ''}</summary><p>Based on extracted evidence and supplier / purchase-order checks. The score never overrides an approval rule.</p><ul>${c.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul></details>`;
 }
 function renderDashboard(rows) {
   const el = $('#ai-dashboard');
@@ -1499,7 +1529,7 @@ async function detail(id, generation) {
           ? notInvoiceHelp(docType)
           : rejectionHelp(dec);
   $("#main").innerHTML =
-    `<a href="${isAdmin() ? "#queue" : "#invoices"}" class="back-link">← ${isAdmin() ? "Requests" : "Invoice reviews"}</a><div class="page-heading detail-title"><div><h1>${esc(s.supplier_name || d.filename)}</h1><p>${esc(s.invoice_number ? "Invoice #" + s.invoice_number + " · " : "")}${esc(d.filename)} · ${esc(date(d.created_at))}</p></div>${uploadButton("Upload another")}</div>${confidencePanel(d.confidence)}${tickets.some(t => t.status === "open" && t.requested_by === "invoice-ai") ? `<div class="success-message">AI has created a procurement request with the invoice details. No request form is needed. <a href="${isAdmin() ? "#queue" : "#requests"}">View request →</a></div>` : ""}${child ? `<div class="success-message">This invoice has a newer result. <a href="#invoice/${encodeURIComponent(latestDescendant(id))}">Open latest result →</a></div>` : ""}<section class="card outcome ${key}${rechecked && persistent.size ? " rechecked" : ""}"><div class="outcome-head">${badge(d)}${rechecked && persistent.size ? `<span class="badge still-open">${persistent.size} still unresolved</span>` : ""}<h2>${title}</h2></div><p>${esc(description)}</p>${canReview && open.length ? `<div class="button-row" style="margin-top:14px"><a class="button-link primary" href="#invoice/${encodeURIComponent(id)}" data-resolve-open="${esc(id)}">Resolve step by step →</a></div>` : ""}${Object.keys(fields).length ? `<dl class="invoice-summary"><div><dt>Invoice total</dt><dd>${esc(s.invoice_gross_total ? (rv?.display?.invoice_gross_total ? s.invoice_gross_total : `${curr} ${s.invoice_gross_total}`) : "Not confirmed")}</dd></div><div><dt>Invoice date</dt><dd>${esc(s.invoice_date || "Not confirmed")}</dd></div><div><dt>Purchase order</dt><dd>${esc(s.po_reference || "Not selected")}</dd></div><div><dt>Supplier</dt><dd>${esc(s.supplier_name || "Not confirmed")}</dd></div></dl>` : ""}${noReading && !isAdmin() ? `<div class="button-row" style="margin-top:16px">${!child ? '<button class="primary" data-action="retry-reading">Try reading again</button>' : ""}<button data-action="upload">Upload a replacement PDF</button></div><div id="retry-error"></div>` : ""}${notInvoice ? notInvoicePanel(docType, child) : key === "rejected" ? duplicateLink(d, dec) : ""}</section><div class="review-layout"><div class="review-panel">${canReview ? reviewHTML(rv) : canProcure || (isAdmin() && supplierStateOnly && !!rv && !child && !postedRelated) ? procurementHTML(rv) : canRecheckRejected ? supplierRejectHTML(rv, decisionCodes) : `${isAdmin() && !child && tickets.length ? terminalRequestsHTML() : ""}${summaryHTML(fields)}`}<div id="review-notice" role="status"></div></div><section class="card document-panel" aria-label="Invoice document"><div class="document-header"><h2>Original invoice</h2><button class="mobile-document-toggle small" data-action="toggle-preview" aria-expanded="false">Show document</button><div class="page-controls" id="page-controls"></div></div><div class="document-canvas" id="document-canvas"><p>Loading document…</p></div><div class="document-caption" id="document-caption">Compare these details with your invoice.</div></section></div>${detailsHTML(d, dec, rv)}<p class="footer-note">Approval records an amount against a purchase order. This demo does not send payments.</p>`;
+    `<a href="${isAdmin() ? "#queue" : "#invoices"}" class="back-link">← ${isAdmin() ? "Requests" : "Invoice reviews"}</a><section class="card detail-header ${key}${rechecked && persistent.size ? " rechecked" : ""}"><div class="detail-top"><div class="detail-id"><h1>${esc(s.supplier_name || d.filename)}</h1><p>${esc(detailSubtitle(d, s))}</p></div><div class="detail-marks">${badge(d)}${rechecked && persistent.size ? `<span class="badge still-open">${persistent.size} still unresolved</span>` : ""}${d.confidence?.score != null ? confidenceBadge(d.confidence) : ""}</div></div><h2>${title}</h2><p class="detail-outcome">${esc(description)}</p>${Object.keys(fields).length ? `<dl class="invoice-summary"><div><dt>Invoice total</dt><dd>${esc(s.invoice_gross_total ? (rv?.display?.invoice_gross_total ? s.invoice_gross_total : `${curr} ${s.invoice_gross_total}`) : "Not confirmed")}</dd></div><div><dt>Invoice date</dt><dd>${esc(s.invoice_date || "Not confirmed")}</dd></div><div><dt>Purchase order</dt><dd>${esc(s.po_reference || "Not selected")}</dd></div></dl>` : ""}${confidenceReasons(d.confidence)}<div class="button-row detail-actions">${canReview && open.length ? `<a class="button-link primary" href="#invoice/${encodeURIComponent(id)}" data-resolve-open="${esc(id)}">Resolve step by step →</a>` : ""}${noReading && !isAdmin() && !child ? '<button class="primary" data-action="retry-reading">Try reading again</button>' : ""}${noReading && !isAdmin() ? '<button data-action="upload">Upload a replacement PDF</button>' : ""}</div><div id="retry-error"></div>${tickets.some(t => t.status === "open" && t.requested_by === "invoice-ai") ? `<p class="detail-note">AI has created a procurement request with the invoice details. <a href="${isAdmin() ? "#queue" : "#requests"}">View request →</a></p>` : ""}${child ? `<p class="detail-note">This invoice has a newer result. <a href="#invoice/${encodeURIComponent(latestDescendant(id))}">Open latest result →</a></p>` : ""}${notInvoice ? notInvoicePanel(docType, child) : key === "rejected" ? duplicateLink(d, dec) : ""}</section><div class="review-layout"><div class="review-panel">${canReview ? reviewHTML(rv) : canProcure || (isAdmin() && supplierStateOnly && !!rv && !child && !postedRelated) ? procurementHTML(rv) : canRecheckRejected ? supplierRejectHTML(rv, decisionCodes) : `${isAdmin() && !child && tickets.length ? terminalRequestsHTML() : ""}${summaryHTML(fields)}`}<div id="review-notice" role="status"></div></div><section class="card document-panel" aria-label="Invoice document"><div class="document-header"><h2>Original invoice</h2><button class="mobile-document-toggle small" data-action="toggle-preview" aria-expanded="false">Show document</button><div class="page-controls" id="page-controls"></div></div><div class="document-canvas" id="document-canvas"><p>Loading document…</p></div><div class="document-caption" id="document-caption">Compare these details with your invoice.</div></section></div>${detailsHTML(d, dec, rv)}<p class="footer-note">Approval records an amount against a purchase order. This demo does not send payments.</p>`;
   renderDocument(id, generation);
 }
 function latestDescendant(id) {
@@ -2189,7 +2219,7 @@ function drawPage() {
   if (block && block.page === state.page)
     overlay = `<div class="evidence-box" style="left:${Math.max(0, ((block.x0 - 2) / pg.width) * 100)}%;top:${Math.max(0, ((block.top - 2) / pg.height) * 100)}%;width:${Math.min(100, ((block.x1 - block.x0 + 4) / pg.width) * 100)}%;height:${((block.bottom - block.top + 4) / pg.height) * 100}%"></div>`;
   $("#document-canvas").innerHTML =
-    `<div class="pdf-page"><img src="/api/runs/${encodeURIComponent(state.detail.run_id)}/page/${state.page}?role=${encodeURIComponent(getToken() || "")}" alt="Original invoice, page ${state.page}">${overlay}</div>`;
+    `<div class="pdf-page"><img src="/api/runs/${encodeURIComponent(state.detail.run_id)}/page/${state.page}?role=${encodeURIComponent(getToken() || "")}&ws=${encodeURIComponent(getWorkspace())}" alt="Original invoice, page ${state.page}">${overlay}</div>`;
   $("#document-canvas img").addEventListener("error", () => {
     $("#document-canvas").innerHTML = errorHTML(
       "This page could not be displayed. Reload the preview or use your original PDF.",
@@ -2633,7 +2663,21 @@ function help() {
       "A simpler way to review invoices",
       "Upload, check, and act only where your help is needed.",
     ) +
-    `<div class="help-content"><section class="card"><h2>Your invoice journey</h2><ol><li><b>Upload a PDF.</b> We read the details and check the supplier, purchase order and amounts.</li><li><b>See the result.</b> Eligible invoices are approved automatically. Invoices that need your help appear under Needs attention.</li><li><b>Resolve the highlighted items.</b> Compare the details with the original, save corrections, and select a purchase order. AI independently verifies scan readings where possible. Confirm only the values that remain uncertain.</li><li><b>Check again.</b> All rules run again. Passing invoices are approved; anything unresolved gets a next step.</li></ol><h3>What the statuses mean</h3><p><b>Approved:</b> The amount was added to the approved purchase order balance. An exception label means a permitted small budget overage.</p><p><b>Needs review:</b> Nothing was approved. Open the invoice for corrections or next steps.</p><p><b>Rejected:</b> No amount was added. The invoice explains why, including duplicates and blocked suppliers.</p><p><b>Couldn’t process:</b> The document could not be read. Retry an interrupted reading or upload a replacement PDF.</p></section><section class="card"><h2>If you can’t resolve an invoice</h2><p>Keep it pending while you ask your supplier or procurement team for the missing information. Reject it with a reason if it should not proceed.</p><p>Anything that needs master data — a new or blocked supplier, a missing or too-small purchase order — is automatically sent to procurement when a verified supplier or PO is missing. Additional requests can be raised from the invoice. A same-day match can be confirmed as a separate invoice with a recorded reason; exact duplicates are final. The demo never reverses an approval or sends a payment.</p><p>Each invoice keeps its original document, earlier attempts, decision explanation and technical evidence under <b>Decision details & activity</b>.</p></section><section class="card"><h2>Roles</h2><p><b>Invoice reviewer</b> uploads, corrects, approves and rejects. <b>Procurement admin</b> manages suppliers and purchase orders and works the procurement queue, but cannot approve — the person who creates the budget is never the person who releases money against it. Every action is recorded with the role that performed it, and the server enforces the split on every request.</p><p>There is no sign-in: use <b>Switch to procurement</b> / <b>Switch to invoice review</b> in the top bar to change role. The server still enforces what each role may do.</p></section>${isAdmin() ? '<section class="card"><h2>Demo settings</h2><p>Reset removes all invoices, reviews and approvals in this demo and restores the example suppliers and purchase orders. This cannot be undone.</p><button class="danger" data-action="reset">Reset demo workspace</button><div id="reset-error"></div></section>' : ""}<a href="#invoices">← Back to invoices</a></div>`;
+    `<div class="help-content"><section class="card"><h2>Your invoice journey</h2><ol><li><b>Upload a PDF.</b> We read the details and check the supplier, purchase order and amounts.</li><li><b>See the result.</b> Eligible invoices are approved automatically. Invoices that need your help appear under Needs attention.</li><li><b>Resolve the highlighted items.</b> Compare the details with the original, save corrections, and select a purchase order. AI independently verifies scan readings where possible. Confirm only the values that remain uncertain.</li><li><b>Check again.</b> All rules run again. Passing invoices are approved; anything unresolved gets a next step.</li></ol><h3>What the statuses mean</h3><p><b>Approved:</b> The amount was added to the approved purchase order balance. An exception label means a permitted small budget overage.</p><p><b>Needs review:</b> Nothing was approved. Open the invoice for corrections or next steps.</p><p><b>Rejected:</b> No amount was added. The invoice explains why, including duplicates and blocked suppliers.</p><p><b>Couldn’t process:</b> The document could not be read. Retry an interrupted reading or upload a replacement PDF.</p></section><section class="card"><h2>If you can’t resolve an invoice</h2><p>Keep it pending while you ask your supplier or procurement team for the missing information. Reject it with a reason if it should not proceed.</p><p>Anything that needs master data — a new or blocked supplier, a missing or too-small purchase order — is automatically sent to procurement when a verified supplier or PO is missing. Additional requests can be raised from the invoice. A same-day match can be confirmed as a separate invoice with a recorded reason; exact duplicates are final. The demo never reverses an approval or sends a payment.</p><p>Each invoice keeps its original document, earlier attempts, decision explanation and technical evidence under <b>Decision details & activity</b>.</p></section><section class="card"><h2>Roles</h2><p><b>Invoice reviewer</b> uploads, corrects, approves and rejects. <b>Procurement admin</b> manages suppliers and purchase orders and works the procurement queue, but cannot approve — the person who creates the budget is never the person who releases money against it. Every action is recorded with the role that performed it, and the server enforces the split on every request.</p><p>There is no sign-in: use <b>Switch to procurement</b> / <b>Switch to invoice review</b> in the top bar to change role. The server still enforces what each role may do.</p></section><section class="card"><h2>Your workspace</h2><p>This demo is public, so each browser gets its own workspace. The invoices you upload, the purchase-order budgets you spend and the settings you change are yours alone — nobody else testing right now can see them, and they cannot spend your budgets.</p><p class="muted" id="workspace-line">Checking your workspace…</p><h3>Reset</h3><p>Reset removes every invoice, review and approval in <b>your</b> workspace and restores the example suppliers and purchase orders, so you can run a scenario again from the start. It does not touch anyone else's. This cannot be undone.</p><button class="danger" data-action="reset">Reset my workspace</button><div id="reset-error"></div></section><a href="#invoices">← Back to invoices</a></div>`;
+  describeWorkspace();
+}
+async function describeWorkspace() {
+  const line = $("#workspace-line");
+  if (!line) return;
+  try {
+    const w = await api("/api/workspace");
+    const counts = w.counts || {};
+    line.textContent = w.shared
+      ? "This browser is using the shared demo workspace, because it could not store an id. Anyone else without an id shares it with you."
+      : `Your workspace holds ${counts.invoices} invoice${counts.invoices === 1 ? "" : "s"}, ${counts.suppliers} suppliers and ${counts.orders} purchase orders. It is kept for this browser only.`;
+  } catch (e) {
+    line.textContent = "Your workspace could not be read just now.";
+  }
 }
 async function withAction(container, fn) {
   if (state.busy) return;
@@ -3272,16 +3316,16 @@ async function handleAction(action, button) {
   if (action === "reset") {
     if (
       !(await confirmAction(
-        "Reset the demo workspace?",
-        "This permanently removes every invoice, review and approval in this demo. Example suppliers and purchase orders will be restored.",
-        "Reset workspace",
+        "Reset your workspace?",
+        "This permanently removes every invoice, review and approval in your own workspace, and restores the example suppliers and purchase orders. Nobody else's workspace is affected.",
+        "Reset my workspace",
       ))
     )
       return;
     await withAction(button.closest("section"), async () => {
       await post("/api/admin/reset");
       state.live = null;
-      notice("Demo workspace reset.");
+      notice("Your workspace is back to its starting state.");
       location.hash = "invoices";
     });
   }
@@ -3456,6 +3500,14 @@ document.addEventListener("keydown", (e) => {
   welcome.tab = e.key === "Home" ? "upload" : e.key === "End" ? "storage" : welcome.tab === "upload" ? "storage" : "upload";
   renderWelcomeIntake();
   document.querySelector(`[data-action="welcome-tab"][data-tab="${welcome.tab}"]`).focus();
+});
+// A label is clickable but not keyboard-activatable on its own.
+document.addEventListener("keydown", (e) => {
+  const label = e.target.closest?.('label[for="file-input"]');
+  if (label && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    label.click();
+  }
 });
 $("#file-input").addEventListener("change", (e) => {
   if (state.route === "home") stageWelcomeFiles(e.target.files);
@@ -3747,7 +3799,7 @@ function resolveDocHTML() {
   const controls = doc.pages.length > 1
     ? `<div class="resolve-pages"><button type="button" class="icon" data-resolve="page" data-dir="-1" aria-label="Previous page" ${r.page === 1 ? "disabled" : ""}>‹</button><span>Page ${r.page} of ${doc.pages.length}</span><button type="button" class="icon" data-resolve="page" data-dir="1" aria-label="Next page" ${r.page === doc.pages.length ? "disabled" : ""}>›</button></div>`
     : "";
-  return `${controls}<div class="resolve-canvas"><div class="pdf-page"><img src="/api/runs/${encodeURIComponent(r.runId)}/page/${r.page}?role=${encodeURIComponent(getToken() || "")}" alt="Original invoice, page ${r.page}">${boxes}</div></div>`;
+  return `${controls}<div class="resolve-canvas"><div class="pdf-page"><img src="/api/runs/${encodeURIComponent(r.runId)}/page/${r.page}?role=${encodeURIComponent(getToken() || "")}&ws=${encodeURIComponent(getWorkspace())}" alt="Original invoice, page ${r.page}">${boxes}</div></div>`;
 }
 function resolveSideHTML() {
   const r = state.resolve; const ds = r.decisions; const c = resolveCounts();

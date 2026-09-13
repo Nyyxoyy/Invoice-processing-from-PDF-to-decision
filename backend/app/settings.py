@@ -5,6 +5,10 @@ next to the database (same place `connectors.py` keeps the watched-folder
 choice) so a workspace reset — which clears invoices — never silently reverts a
 decision procurement made about how the AI should behave.
 
+Each workspace carries its own switches, for the same reason it carries its own
+invoices: on a shared demo one visitor flipping a switch must not change how
+another visitor's invoices are decided.
+
 Today there is one switch, `unknown_supplier_action`, which decides what happens
 when an invoice names a supplier that is not in the register:
 
@@ -33,7 +37,6 @@ SETTINGS_FILE = "workspace-settings.json"
 DEFAULTS: dict = {"unknown_supplier_action": "reject"}
 
 _guard = threading.Lock()
-_state: dict = {"path": None, "values": dict(DEFAULTS)}
 
 
 def _coerce(raw: dict) -> dict:
@@ -44,44 +47,49 @@ def _coerce(raw: dict) -> dict:
     return values
 
 
-def init(data_dir: str) -> dict:
-    """Bind the settings file and load it. Malformed or absent file -> defaults."""
-    path = Path(data_dir) / SETTINGS_FILE
+def load(directory: Path) -> dict:
+    """Read one workspace's switches. Malformed or absent file -> defaults."""
     try:
-        saved = json.loads(path.read_text())
+        saved = json.loads((Path(directory) / SETTINGS_FILE).read_text())
     except (OSError, ValueError):
         saved = {}
-    with _guard:
-        _state["path"] = path
-        _state["values"] = _coerce(saved if isinstance(saved, dict) else {})
-        return dict(_state["values"])
+    return _coerce(saved if isinstance(saved, dict) else {})
 
 
 def get() -> dict:
-    with _guard:
-        return dict(_state["values"])
+    """The switches of the workspace this request belongs to."""
+    from .workspaces import current
+    return dict(current().values)
 
 
 def update(changes: dict) -> dict:
-    """Apply and persist. Unknown keys and invalid values are rejected loudly —
-    a silently ignored setting is worse than an error."""
+    """Apply and persist for the current workspace. Unknown keys and invalid
+    values are rejected loudly — a silently ignored setting is worse than an
+    error."""
+    from .workspaces import current
     action = changes.get("unknown_supplier_action")
     if action is not None and action not in UNKNOWN_SUPPLIER_ACTIONS:
         raise ValueError(f"unknown_supplier_action must be one of {', '.join(UNKNOWN_SUPPLIER_ACTIONS)}")
+    ws = current()
     with _guard:
-        values = dict(_state["values"])
+        values = dict(ws.values)
         if action is not None:
             values["unknown_supplier_action"] = action
-        _state["values"] = values
-        path = _state["path"]
-        if path is not None:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(values, indent=1))
+        ws.values = values
+        ws.dir.mkdir(parents=True, exist_ok=True)
+        (ws.dir / SETTINGS_FILE).write_text(json.dumps(values, indent=1))
         return dict(values)
 
 
+def policy_for(values: dict) -> Policy:
+    """DEFAULT_POLICY with one workspace's switches applied."""
+    action = (values or {}).get("unknown_supplier_action", DEFAULTS["unknown_supplier_action"])
+    return replace(DEFAULT_POLICY, unknown_vendor_action=action)
+
+
 def current_policy() -> Policy:
-    """DEFAULT_POLICY with the workspace switches applied. Every decision path
-    resolves the policy through here, so a change takes effect on the next run
-    without a restart — and each run still records the version it ran under."""
-    return replace(DEFAULT_POLICY, unknown_vendor_action=get()["unknown_supplier_action"])
+    """The policy of the workspace this request belongs to. Every decision path
+    resolves through here, so a change takes effect on the next run without a
+    restart — and each run still records the version it ran under."""
+    from .workspaces import current
+    return policy_for(current().values)

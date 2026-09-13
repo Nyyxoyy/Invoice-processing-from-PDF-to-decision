@@ -14,6 +14,7 @@ import app.settings as settings
 from app.policy import DEFAULT_POLICY, Policy
 from app.review import load_latest, onboard_vendor, reevaluate, save_revision
 from app.rules import Code, ResolverInput, Route, resolve
+from app.workspaces import shared_dir
 from tests.test_pipeline import TICKET_POLICY, env, run_pdf  # noqa: F401  (env is a fixture)
 
 UNKNOWN = "Meridian Freight SARL"
@@ -154,9 +155,11 @@ def test_an_invalid_action_is_refused_not_ignored(api):
 
 def test_the_choice_survives_a_restart(api, tmp_path):
     api.patch("/api/settings", json={"unknown_supplier_action": "ticket"}, headers=_hdr("admin"))
-    assert settings.init(str(tmp_path))["unknown_supplier_action"] == "ticket"
+    assert settings.load(shared_dir(str(tmp_path)))["unknown_supplier_action"] == "ticket"
 
 
 def test_a_corrupt_settings_file_falls_back_to_the_default(tmp_path):
-    (tmp_path / settings.SETTINGS_FILE).write_text("{not json")
-    assert settings.init(str(tmp_path))["unknown_supplier_action"] == "reject"
+    ws_dir = shared_dir(str(tmp_path))
+    ws_dir.mkdir(parents=True, exist_ok=True)
+    (ws_dir / settings.SETTINGS_FILE).write_text("{not json")
+    assert settings.load(shared_dir(str(tmp_path)))["unknown_supplier_action"] == "reject"

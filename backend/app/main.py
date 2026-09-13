@@ -28,7 +28,7 @@ from .intake import BatchRegistry, IntakeError, expand_uploads
 from .sources import build_sources, describe_sources, get_source
 from .ledger import CommitResult
 from .policy import UNKNOWN_SUPPLIER_ACTIONS
-from . import settings
+from . import settings, workspaces
 
 DATA_DIR = os.environ.get("DATA_DIR", str(Path(__file__).resolve().parents[2] / "data"))
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -73,34 +73,56 @@ def load_env_file() -> None:
 async def lifespan(app: FastAPI):
     load_env_file()
     Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
-    settings.init(DATA_DIR)
-    conn = connect(str(Path(DATA_DIR) / "app.db"))
-    interrupted = startup_recovery(conn)
-    seed_if_empty(conn)
+    workspaces.init(DATA_DIR)
+    # The shared workspace, used by anything that arrives without an id: the
+    # health check, curl, the watched folder. Visitors get their own.
+    shared = workspaces.registry().get(workspaces.DEFAULT_WORKSPACE)
     from .automation import reconcile_non_invoice_holds
-    reconcile_non_invoice_holds(conn, settings.current_policy())
-    settle_requests(conn, "system")
-    app.state.conn = conn
-    app.state.work_lock = threading.Lock()  # single bounded worker: one pipeline at a time
+    reconcile_non_invoice_holds(shared.conn, shared.policy())
+    interrupted = shared.conn.execute(
+        "SELECT COUNT(*) c FROM runs WHERE failure_reason='interrupted'").fetchone()["c"]
     app.state.interrupted_on_boot = interrupted
-    app.state.batches = BatchRegistry(conn, app.state.work_lock,
-                                      settings.current_policy, DATA_DIR)
     sources = build_sources(DATA_DIR)
 
     def folder_pickup(parts):
         try:
-            app.state.batches.start(expand_uploads(parts), "watched-folder")
+            shared.batches.start(expand_uploads(parts), "watched-folder")
         except IntakeError:
             pass  # every part was unusable; the files are already in rejected/
     if os.environ.get("INTAKE_FOLDER_DISABLED") != "1":
         sources["folder"].start(folder_pickup)
     yield
     sources["folder"].stop()
-    app.state.batches.shutdown()
-    conn.close()
+    # every workspace shuts its batch workers down and closes its database, so
+    # nothing is writing when the process goes away
+    workspaces.registry().close_all()
 
 
-app = FastAPI(title="AP Invoice Decisioning", lifespan=lifespan, dependencies=[Depends(auth_gate)])
+def ws() -> "workspaces.Workspace":
+    """The workspace this request belongs to. Every endpoint reaches its data
+    through here, so one visitor's invoices, orders and ledger are simply a
+    different database from another's."""
+    return workspaces.current()
+
+
+async def workspace_gate(request: Request) -> None:
+    """Bind the request to the workspace its `X-Workspace` id names. The id is
+    generated and kept by the browser; the server issues nothing and can only be
+    asked for a workspace by someone who already holds its id. An absent or
+    malformed id falls back to the shared demo workspace."""
+    # <img src> cannot send headers, so rendered page images may name their
+    # workspace in the query string — the same exception the role already has.
+    named = request.headers.get("X-Workspace")
+    if not named and "/page/" in request.url.path and request.url.path.startswith("/api/runs/"):
+        named = request.query_params.get("ws")
+    space = workspaces.registry().get(named)
+    token = workspaces.use(space)
+    request.state.workspace = space
+    request.state.workspace_token = token
+
+
+app = FastAPI(title="AP Invoice Decisioning", lifespan=lifespan,
+              dependencies=[Depends(auth_gate), Depends(workspace_gate)])
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 
@@ -158,8 +180,8 @@ async def upload_invoice(file: UploadFile, user: dict = Depends(require_reviewer
         # The lock goes IN, so it covers ingest and the decision but not the
         # model call: a second upload arriving meanwhile is read alongside this
         # one instead of queueing behind it.
-        return process_document(app.state.conn, tmp_path, file.filename or "upload.pdf",
-                                settings.current_policy(), DATA_DIR, lock=app.state.work_lock)
+        return process_document(ws().conn, tmp_path, file.filename or "upload.pdf",
+                                settings.current_policy(), ws().data_dir, lock=ws().lock)
 
     try:
         result = await run_in_threadpool(work)
@@ -188,7 +210,7 @@ def _start_batch(parts: list[tuple[str, bytes]], user: dict) -> dict:
         items = expand_uploads(parts)
     except IntakeError as e:
         raise HTTPException(e.status, e.message)
-    batch = app.state.batches.start(items, user["role"])
+    batch = ws().batches.start(items, user["role"])
     return batch.public()
 
 
@@ -202,12 +224,12 @@ async def upload_batch(files: list[UploadFile], user: dict = Depends(require_rev
 
 @app.get("/api/batches")
 def list_batches(user: dict = Depends(require_reviewer)):
-    return app.state.batches.list()
+    return ws().batches.list()
 
 
 @app.get("/api/batches/{batch_id}")
 def batch_detail(batch_id: str):
-    batch = app.state.batches.get(batch_id)
+    batch = ws().batches.get(batch_id)
     if batch is None:
         raise HTTPException(404, "This batch is no longer tracked. Its finished invoices are in the inbox.")
     return batch.public()
@@ -333,7 +355,7 @@ def edge_case_fixture(name: str):
 
 @app.get("/api/runs")
 def list_runs():
-    rows = app.state.conn.execute(
+    rows = ws().conn.execute(
         "SELECT r.run_id, r.run_status, r.disposition, r.decision_mode, r.kind, "
         "r.failure_reason, r.invoice_id, r.document_id, r.parent_run_id, r.created_at, r.finished_at, r.snapshot_json, d.filename, "
         "(SELECT fields_json FROM field_revisions f WHERE f.run_id=r.run_id ORDER BY seq DESC LIMIT 1) AS fields_json, "
@@ -351,7 +373,7 @@ def list_runs():
         from .normalize import display_values
         item['display'] = display_values(item['summary'], (context.get('currency') or {}).get('code'))
         from .automation import saved_confidence
-        item['confidence'] = saved_confidence(app.state.conn, item['run_id'])
+        item['confidence'] = saved_confidence(ws().conn, item['run_id'])
         result.append(item)
     return result
 
@@ -362,15 +384,15 @@ async def retry_run(run_id: str, as_invoice: bool = False, user: dict = Depends(
     ``as_invoice`` re-reads a document the type gate rejected as "not an
     invoice", skipping that gate (reviewer override, recorded on the run)."""
     def work():
-        with app.state.work_lock:
-            row = app.state.conn.execute(
+        with ws().lock:
+            row = ws().conn.execute(
                 'SELECT d.bytes_path, d.filename FROM runs r JOIN documents d USING(document_id) WHERE run_id=?',
                 (run_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, 'Invoice not found')
             try:
-                result = process_document(app.state.conn, row['bytes_path'], row['filename'],
-                                          settings.current_policy(), DATA_DIR,
+                result = process_document(ws().conn, row['bytes_path'], row['filename'],
+                                          settings.current_policy(), ws().data_dir,
                                           retry_of=run_id, as_invoice=as_invoice)
             except ValueError as e:
                 raise HTTPException(409, str(e))
@@ -382,16 +404,16 @@ async def retry_run(run_id: str, as_invoice: bool = False, user: dict = Depends(
 
 @app.get("/api/runs/{run_id}")
 def run_detail(run_id: str):
-    run = app.state.conn.execute(
+    run = ws().conn.execute(
         "SELECT r.*, d.filename FROM runs r JOIN documents d USING (document_id) WHERE r.run_id=?",
         (run_id,)).fetchone()
     if run is None:
         raise HTTPException(404, "no such run")
-    events = app.state.conn.execute(
+    events = ws().conn.execute(
         "SELECT seq, ts, stage, event_type, payload FROM run_events WHERE run_id=? ORDER BY seq", (run_id,)).fetchall()
     out = dict(run)
     from .automation import saved_confidence
-    out["confidence"] = saved_confidence(app.state.conn, run_id)
+    out["confidence"] = saved_confidence(ws().conn, run_id)
     out["snapshot"] = json.loads(out.pop("snapshot_json") or "null")
     out["events"] = [{**dict(e), "payload": json.loads(e["payload"])} for e in events]
     return out
@@ -403,8 +425,8 @@ def delete_run(run_id: str, user: dict = Depends(require_admin)):
     deleting them would falsify the ledger; clear those with a workspace reset.
     Orphaned documents/invoices (no remaining runs, no postings) are removed,
     which also frees the file hash for a fresh re-upload."""
-    conn = app.state.conn
-    with app.state.work_lock:
+    conn = ws().conn
+    with ws().lock:
         run = conn.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
         if run is None:
             raise HTTPException(404, "no such run")
@@ -443,12 +465,12 @@ def delete_run(run_id: str, user: dict = Depends(require_admin)):
 
 @app.get("/api/pos")
 def list_pos():
-    rows = app.state.conn.execute(
+    rows = ws().conn.execute(
         "SELECT p.po_id, p.supplier_id, p.currency, p.amount_minor, p.status, "
         "COALESCE((SELECT SUM(CASE kind WHEN 'reversal' THEN -amount_minor ELSE amount_minor END) "
         "FROM ledger_events le WHERE le.po_id = p.po_id), 0) AS consumed_minor FROM pos p").fetchall()
     from .review import invoices_by_po
-    grouped = invoices_by_po(app.state.conn)
+    grouped = invoices_by_po(ws().conn)
     return [{**dict(r), "invoices": grouped.get(r["po_id"], [])} for r in rows]
 
 
@@ -473,7 +495,7 @@ class DecideBody(BaseModel):
 
 def _review_guard(fn):
     def wrapper(*a, **kw):
-        with app.state.work_lock:
+        with ws().lock:
             try:
                 return fn(*a, **kw)
             except ReviewError as e:
@@ -484,30 +506,30 @@ def _review_guard(fn):
 @app.get("/api/runs/{run_id}/review")
 def review_view(run_id: str):
     try:
-        seq, fields, context = load_latest(app.state.conn, run_id)
+        seq, fields, context = load_latest(ws().conn, run_id)
     except ReviewError as e:
         raise HTTPException(e.status, e.message)
-    diagnosis = diagnose_run(app.state.conn, run_id, fields, context)
+    diagnosis = diagnose_run(ws().conn, run_id, fields, context)
     from .pipeline import resolve_vendor
     from .normalize import extract_name, extract_po_refs
     sup = fields.get("supplier_name")
-    vendor = resolve_vendor(app.state.conn, extract_name(sup.raw_value) if sup and sup.raw_value else None)
+    vendor = resolve_vendor(ws().conn, extract_name(sup.raw_value) if sup and sup.raw_value else None)
     # budget forecast: for every selectable order, and for the order the invoice references now
     gross_minor, inv_currency = invoice_gross_minor(fields, context)
     candidates = []
-    for c in po_candidates(app.state.conn, fields):
-        row = app.state.conn.execute("SELECT * FROM pos WHERE po_id=?", (c["po_id"],)).fetchone()
-        candidates.append({**c, **{k: v for k, v in budget_forecast(app.state.conn, row, gross_minor, inv_currency, settings.current_policy()).items()
+    for c in po_candidates(ws().conn, fields):
+        row = ws().conn.execute("SELECT * FROM pos WHERE po_id=?", (c["po_id"],)).fetchone()
+        candidates.append({**c, **{k: v for k, v in budget_forecast(ws().conn, row, gross_minor, inv_currency, settings.current_policy()).items()
                                    if k in ("remaining_minor", "status", "short_minor")}})
     po_rec = fields.get("po_reference")
     refs = extract_po_refs(po_rec.raw_value) if po_rec and po_rec.raw_value else []
-    if po_rec and po_rec.raw_value and app.state.conn.execute("SELECT 1 FROM pos WHERE po_id=?", (po_rec.raw_value.strip(),)).fetchone():
+    if po_rec and po_rec.raw_value and ws().conn.execute("SELECT 1 FROM pos WHERE po_id=?", (po_rec.raw_value.strip(),)).fetchone():
         refs = [po_rec.raw_value.strip()]
     budget = None
     if len(refs) == 1:
-        row = app.state.conn.execute("SELECT * FROM pos WHERE po_id=?", (refs[0],)).fetchone()
+        row = ws().conn.execute("SELECT * FROM pos WHERE po_id=?", (refs[0],)).fetchone()
         if row is not None and vendor is not None and row["supplier_id"] == vendor["supplier_id"]:
-            budget = {**budget_forecast(app.state.conn, row, gross_minor, inv_currency, settings.current_policy()),
+            budget = {**budget_forecast(ws().conn, row, gross_minor, inv_currency, settings.current_policy()),
                       "gross_minor": gross_minor}
     return {
         "po_supplier_id": vendor["supplier_id"] if vendor else None,
@@ -523,21 +545,21 @@ def review_view(run_id: str):
         "display": display_values({n: r.raw_value for n, r in fields.items()}, (context.get("currency") or {}).get("code")),
         "diagnosis": diagnosis,
         # what procurement still owes here (empty = the rest is the reviewer's)
-        "procurement_needs": procurement_asks(app.state.conn, fields, context, diagnosis),
+        "procurement_needs": procurement_asks(ws().conn, fields, context, diagnosis),
     }
 
 
 @app.post("/api/runs/{run_id}/review/correct")
 def review_correct(run_id: str, body: CorrectBody, user: dict = Depends(require_reviewer)):
     seq = _review_guard(correct_field)(
-        app.state.conn, run_id, body.field, body.value, user["actor"], body.expected_seq)
+        ws().conn, run_id, body.field, body.value, user["actor"], body.expected_seq)
     return {"revision_seq": seq, "settled": _settle(user["actor"])}
 
 
 @app.post("/api/runs/{run_id}/review/attest")
 def review_attest(run_id: str, body: AttestBody, user: dict = Depends(require_reviewer)):
     return {"revision_seq": _review_guard(attest_fields)(
-        app.state.conn, run_id, body.fields, user["actor"], body.expected_seq)}
+        ws().conn, run_id, body.fields, user["actor"], body.expected_seq)}
 
 
 class DistinctBody(BaseModel):
@@ -548,13 +570,13 @@ class DistinctBody(BaseModel):
 @app.post("/api/runs/{run_id}/review/confirm-distinct")
 def review_confirm_distinct(run_id: str, body: DistinctBody, user: dict = Depends(require_reviewer)):
     return {"revision_seq": _review_guard(confirm_not_duplicate)(
-        app.state.conn, run_id, user["actor"], body.note, body.expected_seq)}
+        ws().conn, run_id, user["actor"], body.note, body.expected_seq)}
 
 
 @app.post("/api/runs/{run_id}/review/approve")
 def review_approve(run_id: str, body: DecideBody, user: dict = Depends(require_reviewer)):
     result = _review_guard(reevaluate)(
-        app.state.conn, run_id, user["actor"], body.idempotency_key, settings.current_policy())
+        ws().conn, run_id, user["actor"], body.idempotency_key, settings.current_policy())
     if isinstance(result, CommitResult):
         return {"run_id": result.run_id, "invoice_id": result.invoice_id or None,
                 "route": result.decision.route.value,
@@ -566,37 +588,30 @@ def review_approve(run_id: str, body: DecideBody, user: dict = Depends(require_r
 @app.post("/api/runs/{run_id}/review/reject")
 def review_reject(run_id: str, body: DecideBody, user: dict = Depends(require_reviewer)):
     return _review_guard(reject)(
-        app.state.conn, run_id, user["actor"], body.reason or "reviewer rejection", body.idempotency_key)
+        ws().conn, run_id, user["actor"], body.reason or "reviewer rejection", body.idempotency_key)
 
 
 @app.post("/api/admin/reset")
-def demo_reset(user: dict = Depends(require_admin)):
-    """Wipe demo workspace and reseed. Local demo convenience; a hosted deploy
-    gates this behind reviewer sign-in."""
-    conn = app.state.conn
-    with app.state.work_lock:
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            for table in ("field_revisions", "run_events", "ledger_events", "tickets", "runs", "invoices",
-                          "documents", "pos", "vendors"):
-                conn.execute(f"DELETE FROM {table}")
-            conn.execute("COMMIT")
-        except BaseException:
-            conn.execute("ROLLBACK")
-            raise
-        seed_if_empty(conn)
-        # stored originals and extraction evidence belong to the rows just removed
-        removed = 0
-        for sub in ("pdfs", "evidence"):
-            folder = Path(DATA_DIR) / sub
-            if folder.is_dir():
-                for f in folder.iterdir():
-                    if f.is_file():
-                        f.unlink()
-                        removed += 1
-        if getattr(app.state, "batches", None) is not None:
-            app.state.batches._batches.clear()
-    return {"ok": True, "files_removed": removed}
+def demo_reset(user: dict = Depends(current_user)):
+    """Clear the CALLER'S workspace and reseed it. Every role may reset their
+    own demo — it destroys only their own invoices, and nobody else's workspace
+    is reachable from here."""
+    space = ws()
+    removed = workspaces.registry().reset(space)
+    return {"ok": True, "files_removed": removed, "workspace": space.id}
+
+
+@app.get("/api/workspace")
+def workspace_info():
+    """What this browser is working in, so the demo can say so out loud."""
+    space = ws()
+    counts = {
+        "invoices": space.conn.execute("SELECT COUNT(*) c FROM runs").fetchone()["c"],
+        "suppliers": space.conn.execute("SELECT COUNT(*) c FROM vendors").fetchone()["c"],
+        "orders": space.conn.execute("SELECT COUNT(*) c FROM pos").fetchone()["c"],
+    }
+    return {"id": space.id, "shared": space.id == workspaces.DEFAULT_WORKSPACE,
+            "counts": counts, **workspaces.registry().stats()}
 
 
 @app.get("/")
@@ -608,7 +623,7 @@ def index():
 
 
 def _run_doc_path(run_id: str) -> str:
-    row = app.state.conn.execute(
+    row = ws().conn.execute(
         "SELECT d.bytes_path FROM runs r JOIN documents d USING (document_id) WHERE r.run_id=?",
         (run_id,)).fetchone()
     if row is None or not row["bytes_path"]:
@@ -620,12 +635,12 @@ def _run_doc_path(run_id: str) -> str:
 def run_document(run_id: str):
     """Page geometry + evidence blocks so the UI can overlay field locations."""
     path = _run_doc_path(run_id)
-    ev = app.state.conn.execute(
+    ev = ws().conn.execute(
         "SELECT payload FROM run_events WHERE run_id=? AND event_type='classified'", (run_id,)).fetchone()
     blocks = []
     if ev:
         rev_id = json.loads(ev["payload"]).get("extraction_revision_id")
-        rev_file = Path(DATA_DIR) / "evidence" / f"{rev_id}.json"
+        rev_file = Path(ws().data_dir) / "evidence" / f"{rev_id}.json"
         if rev_file.exists():
             blocks = json.loads(rev_file.read_text()).get("blocks", [])
     import fitz
@@ -669,8 +684,8 @@ class POBody(BaseModel):
 def _settle(actor: str) -> list:
     """Settlement writes to the shared connection, so it takes the same worker
     lock every other write takes (the guarded call has released it by now)."""
-    with app.state.work_lock:
-        return settle_requests(app.state.conn, actor)
+    with ws().lock:
+        return settle_requests(ws().conn, actor)
 
 
 def _with_settled(result: dict, actor: str) -> dict:
@@ -680,13 +695,13 @@ def _with_settled(result: dict, actor: str) -> dict:
 
 @app.post("/api/vendors")
 def add_vendor(body: VendorBody, user: dict = Depends(require_admin)):
-    out = _review_guard(onboard_vendor)(app.state.conn, body.name, body.country, user["actor"], body.run_id)
+    out = _review_guard(onboard_vendor)(ws().conn, body.name, body.country, user["actor"], body.run_id)
     return _with_settled(out, user["actor"])
 
 
 @app.post("/api/pos")
 def add_po(body: POBody, user: dict = Depends(require_admin)):
-    out = _review_guard(create_po)(app.state.conn, body.po_id, body.supplier_id, body.currency,
+    out = _review_guard(create_po)(ws().conn, body.po_id, body.supplier_id, body.currency,
                                    body.amount, user["actor"], body.run_id)
     return _with_settled(out, user["actor"])
 
@@ -698,20 +713,20 @@ class POPatch(BaseModel):
 
 @app.patch("/api/pos/{po_id}")
 def edit_po(po_id: str, body: POPatch, user: dict = Depends(require_admin)):
-    out = _review_guard(update_po)(app.state.conn, po_id, amount=body.amount, status=body.status,
+    out = _review_guard(update_po)(ws().conn, po_id, amount=body.amount, status=body.status,
                                    actor=user["actor"])
     return _with_settled(out, user["actor"])
 
 
 @app.delete("/api/pos/{po_id}")
 def remove_po(po_id: str, user: dict = Depends(require_admin)):
-    return _review_guard(delete_po)(app.state.conn, po_id)
+    return _review_guard(delete_po)(ws().conn, po_id)
 
 
 @app.get("/api/queue/procurement")
 def queue_procurement(user: dict = Depends(require_admin)):
-    with app.state.work_lock:
-        return procurement_queue(app.state.conn)
+    with ws().lock:
+        return procurement_queue(ws().conn)
 
 
 class TicketBody(BaseModel):
@@ -731,7 +746,7 @@ class StandaloneRequestBody(BaseModel):
 
 @app.post("/api/requests")
 def create_standalone_request(body: StandaloneRequestBody, user: dict = Depends(require_reviewer)):
-    return _review_guard(open_standalone_request)(app.state.conn, body.kind, body.note, user["actor"],
+    return _review_guard(open_standalone_request)(ws().conn, body.kind, body.note, user["actor"],
                                                   subject=body.subject, supplier_id=body.supplier_id,
                                                   amount=body.amount, currency=body.currency)
 
@@ -748,18 +763,18 @@ def ticket_kinds(user: dict = Depends(current_user)):
 
 @app.post("/api/tickets")
 def create_ticket(body: TicketBody, user: dict = Depends(require_reviewer)):
-    return _review_guard(open_ticket)(app.state.conn, body.run_id, body.kind, body.note, user["actor"])
+    return _review_guard(open_ticket)(ws().conn, body.run_id, body.kind, body.note, user["actor"])
 
 
 @app.get("/api/tickets")
 def get_tickets(status: str = "open", run_id: str | None = None, document_id: str | None = None,
                 user: dict = Depends(current_user)):
-    return list_tickets(app.state.conn, status=status, run_id=run_id, document_id=document_id)
+    return list_tickets(ws().conn, status=status, run_id=run_id, document_id=document_id)
 
 
 @app.post("/api/tickets/{ticket_id}/resolve")
 def close_ticket(ticket_id: str, body: TicketResolveBody, user: dict = Depends(require_admin)):
-    return _review_guard(resolve_ticket)(app.state.conn, ticket_id, body.outcome, body.note, user["actor"])
+    return _review_guard(resolve_ticket)(ws().conn, ticket_id, body.outcome, body.note, user["actor"])
 
 
 class VendorPatch(BaseModel):
@@ -774,7 +789,7 @@ class VendorPatch(BaseModel):
 
 @app.patch("/api/vendors/{supplier_id}")
 def edit_vendor(supplier_id: str, body: VendorPatch, user: dict = Depends(require_admin)):
-    out = _review_guard(update_vendor)(app.state.conn, supplier_id, name=body.name,
+    out = _review_guard(update_vendor)(ws().conn, supplier_id, name=body.name,
                                        country=body.country, status=body.status, aliases=body.aliases,
                                        add_aliases=body.add_aliases, actor=user["actor"], run_id=body.run_id)
     return _with_settled(out, user["actor"])
@@ -782,12 +797,12 @@ def edit_vendor(supplier_id: str, body: VendorPatch, user: dict = Depends(requir
 
 @app.delete("/api/vendors/{supplier_id}")
 def remove_vendor(supplier_id: str, user: dict = Depends(require_admin)):
-    return _review_guard(delete_vendor)(app.state.conn, supplier_id)
+    return _review_guard(delete_vendor)(ws().conn, supplier_id)
 
 
 @app.get("/api/vendors")
 def list_vendors():
-    rows = app.state.conn.execute(
+    rows = ws().conn.execute(
         "SELECT v.supplier_id, v.name, v.status, v.country, v.aliases, "
         "(SELECT COUNT(*) FROM pos p WHERE p.supplier_id = v.supplier_id AND p.status='open') AS open_pos, "
         "(SELECT COUNT(*) FROM pos p WHERE p.supplier_id = v.supplier_id) AS total_pos, "
@@ -799,7 +814,7 @@ def list_vendors():
 
 @app.get("/api/audit")
 def audit_feed(limit: int = 100):
-    rows = app.state.conn.execute(
+    rows = ws().conn.execute(
         "SELECT e.run_id, e.seq, e.ts, e.stage, e.event_type, e.payload, d.filename "
         "FROM run_events e JOIN runs r USING (run_id) JOIN documents d USING (document_id) "
         "ORDER BY e.ts DESC, e.run_id, e.seq DESC LIMIT ?", (min(limit, 300),)).fetchall()
@@ -880,9 +895,11 @@ async def run_sample(name: str, user: dict = Depends(require_reviewer)):
     if path.suffix.lower() != ".pdf":
         raise HTTPException(422, "Archives run as a batch. Use the batch action for this sample.")
 
+    space = ws()
+
     def work():
-        with app.state.work_lock:
-            return process_document(app.state.conn, str(path), name, settings.current_policy(), DATA_DIR)
+        return process_document(space.conn, str(path), name, space.policy(),
+                                space.data_dir, lock=space.lock)
 
     try:
         result = await run_in_threadpool(work)

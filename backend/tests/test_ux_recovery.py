@@ -1,6 +1,6 @@
 """Regression coverage for history-preserving recovery and the invoice inbox."""
 import pytest
-from app import main, pipeline
+from app import main, pipeline, workspaces
 from app.db import connect
 from app.main import seed_if_empty
 from app.policy import DEFAULT_POLICY
@@ -10,11 +10,15 @@ from test_pipeline import make_pdf, stub_extract
 
 @pytest.fixture
 def recovery_env(tmp_path, monkeypatch):
+    """These tests call the endpoint functions directly, with no request to
+    carry a workspace id, so one is bound around them by hand."""
     conn = connect(str(tmp_path / 'app.db'))
     seed_if_empty(conn)
     monkeypatch.setattr(pipeline, 'extract_native', stub_extract)
-    monkeypatch.setattr(main.app.state, 'conn', conn, raising=False)
+    space = workspaces.Workspace(id='recovery-test', dir=tmp_path, conn=conn)
+    token = workspaces.use(space)
     yield conn, tmp_path
+    workspaces.release(token)
     conn.close()
 
 
@@ -47,7 +51,6 @@ def test_retry_endpoint_retains_failure_instead_of_deleting(recovery_env, monkey
     import threading
     from fastapi import HTTPException
     conn, path = recovery_env
-    main.app.state.work_lock = threading.Lock()
     monkeypatch.setattr(main, 'DATA_DIR', str(path))
     pdf = path / 'broken.pdf'
     pdf.write_bytes(b'%PDF-1.7\nbroken')
